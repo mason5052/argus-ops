@@ -8,7 +8,12 @@ from argus_ops.reporters.console import (
     print_info,
     print_success,
 )
-from argus_ops.reporters.json_reporter import findings_to_json, incident_to_json
+from argus_ops.reporters.json_reporter import (
+    diagnosis_to_dict,
+    finding_to_dict,
+    findings_to_json,
+    incident_to_json,
+)
 
 __all__ = [
     "print_findings",
@@ -19,4 +24,6 @@ __all__ = [
     "print_info",
     "findings_to_json",
     "incident_to_json",
+    "finding_to_dict",
+    "diagnosis_to_dict",
 ]

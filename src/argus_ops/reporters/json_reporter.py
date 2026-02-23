@@ -9,13 +9,13 @@ from argus_ops.models import Diagnosis, Finding, Incident
 
 def findings_to_json(findings: list[Finding], indent: int = 2) -> str:
     """Serialize findings to a JSON string."""
-    data = [_finding_to_dict(f) for f in findings]
+    data = [finding_to_dict(f) for f in findings]
     return json.dumps(data, indent=indent, default=str)
 
 
 def diagnosis_to_json(diagnosis: Diagnosis, indent: int = 2) -> str:
     """Serialize a diagnosis to a JSON string."""
-    return json.dumps(_diagnosis_to_dict(diagnosis), indent=indent, default=str)
+    return json.dumps(diagnosis_to_dict(diagnosis), indent=indent, default=str)
 
 
 def incident_to_json(incident: Incident, indent: int = 2) -> str:
@@ -25,13 +25,13 @@ def incident_to_json(incident: Incident, indent: int = 2) -> str:
         "status": incident.status,
         "max_severity": incident.max_severity.value,
         "created_at": incident.created_at.isoformat(),
-        "findings": [_finding_to_dict(f) for f in incident.findings],
-        "diagnosis": _diagnosis_to_dict(incident.diagnosis) if incident.diagnosis else None,
+        "findings": [finding_to_dict(f) for f in incident.findings],
+        "diagnosis": diagnosis_to_dict(incident.diagnosis) if incident.diagnosis else None,
     }
     return json.dumps(data, indent=indent, default=str)
 
 
-def _finding_to_dict(f: Finding) -> dict:
+def finding_to_dict(f: Finding) -> dict:
     return {
         "finding_id": f.finding_id,
         "category": f.category.value,
@@ -46,7 +46,7 @@ def _finding_to_dict(f: Finding) -> dict:
     }
 
 
-def _diagnosis_to_dict(d: Diagnosis) -> dict:
+def diagnosis_to_dict(d: Diagnosis) -> dict:
     return {
         "diagnosis_id": d.diagnosis_id,
         "finding_ids": d.finding_ids,

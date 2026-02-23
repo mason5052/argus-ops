@@ -248,6 +248,134 @@ def diagnose(
 
 
 # ---------------------------------------------------------------------------
+# serve command
+# ---------------------------------------------------------------------------
+
+@cli.command()
+@click.option(
+    "--host",
+    default=None,
+    help="Bind host (default: from config, usually 127.0.0.1)",
+)
+@click.option(
+    "--port",
+    "-p",
+    type=int,
+    default=None,
+    help="Bind port (default: from config, usually 8080)",
+)
+@click.option(
+    "--watch-interval",
+    type=int,
+    default=None,
+    help="Seconds between background cluster scans (default: from config)",
+)
+@click.option(
+    "--reload-interval",
+    type=int,
+    default=None,
+    help="Seconds between browser auto-refresh polls (default: from config)",
+)
+@click.option(
+    "--no-browser",
+    is_flag=True,
+    default=False,
+    help="Do not open browser automatically on startup",
+)
+@click.pass_context
+def serve(
+    ctx: click.Context,
+    host: str | None,
+    port: int | None,
+    watch_interval: int | None,
+    reload_interval: int | None,
+    no_browser: bool,
+) -> None:
+    """Start the web dashboard server (watch mode).
+
+    Launches a FastAPI server with a live dashboard that polls the cluster
+    in the background and auto-refreshes in the browser every 30 seconds.
+
+    Requires: pip install argus-ops[web]
+
+    Examples:
+      argus-ops serve
+      argus-ops serve --port 9090
+      argus-ops serve --watch-interval 60 --no-browser
+      argus-ops serve --host 0.0.0.0 --port 8080
+    """
+    try:
+        import uvicorn
+
+        from argus_ops.web.api import create_app
+        from argus_ops.web.watch_service import WatchService
+    except ImportError:
+        click.echo(
+            "Web dependencies not installed. Run: pip install argus-ops[web]",
+            err=True,
+        )
+        sys.exit(1)
+
+    import threading
+    import webbrowser
+
+    from argus_ops.analyzers import ALL_ANALYZERS
+    from argus_ops.collectors.k8s import KubernetesCollector
+    from argus_ops.engine.pipeline import Pipeline
+
+    cfg = ctx.obj["config"]
+    serve_cfg = cfg.get("serve", {})
+
+    # CLI flags take precedence over config values
+    _host = host or serve_cfg.get("host", "127.0.0.1")
+    _port = port or serve_cfg.get("port", 8080)
+    _watch_interval = watch_interval or serve_cfg.get("watch_interval", 30)
+    _reload_interval = reload_interval or serve_cfg.get("reload_interval", 30)
+    _open_browser = (not no_browser) and serve_cfg.get("open_browser", True)
+
+    # Propagate resolved reload_interval so Jinja2 template receives it
+    cfg.setdefault("serve", {})["reload_interval"] = _reload_interval
+
+    k8s_cfg = cfg["targets"]["kubernetes"]
+    if not k8s_cfg.get("enabled", True):
+        click.echo("Kubernetes target is disabled in config.", err=True)
+        sys.exit(1)
+
+    ai_provider = None
+    if serve_cfg.get("ai_diagnosis", False):
+        from argus_ops.ai.provider import LiteLLMProvider
+        ai_provider = LiteLLMProvider(config=cfg["ai"])
+
+    def _make_pipeline() -> Pipeline:
+        collector = KubernetesCollector(config=k8s_cfg)
+        analyzers = _build_analyzers(ALL_ANALYZERS, cfg)
+        return Pipeline(collectors=[collector], analyzers=analyzers)
+
+    watch = WatchService(
+        pipeline_factory=_make_pipeline,
+        interval=_watch_interval,
+        ai_provider=ai_provider,
+    )
+    watch.start()
+
+    app = create_app(watch=watch, cfg=cfg)
+
+    url = f"http://{_host}:{_port}"
+    click.echo(f"Argus-Ops Dashboard: {url}")
+    click.echo(f"API docs:            {url}/docs")
+    click.echo(f"Watch interval:      {_watch_interval}s (background scan)")
+    click.echo(f"Reload interval:     {_reload_interval}s (browser refresh)")
+    if ai_provider:
+        click.echo(f"AI diagnosis:        enabled ({cfg['ai']['model']})")
+    click.echo("Press Ctrl+C to stop.")
+
+    if _open_browser:
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+
+    uvicorn.run(app, host=_host, port=_port, log_level="warning")
+
+
+# ---------------------------------------------------------------------------
 # config command group
 # ---------------------------------------------------------------------------
 

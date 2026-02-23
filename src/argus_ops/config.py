@@ -61,6 +61,14 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "logging": {
         "level": "INFO",
     },
+    "serve": {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "reload_interval": 30,
+        "watch_interval": 30,
+        "open_browser": True,
+        "ai_diagnosis": False,
+    },
 }
 
 
@@ -114,6 +122,8 @@ def _apply_env_overrides(config: dict[str, Any]) -> None:
         "ARGUS_OPS_AI_MODEL": ("ai", "model"),
         "ARGUS_OPS_AI_BASE_URL": ("ai", "base_url"),
         "ARGUS_OPS_LOG_LEVEL": ("logging", "level"),
+        "ARGUS_OPS_SERVE_HOST": ("serve", "host"),
+        "ARGUS_OPS_SERVE_PORT": ("serve", "port"),
     }
     for env_var, (section, key) in env_mappings.items():
         value = os.environ.get(env_var)
@@ -212,4 +222,14 @@ analyzers:
 # Logging
 logging:
   level: WARNING  # DEBUG, INFO, WARNING, ERROR
+
+# Web Dashboard (argus-ops serve)
+# Requires: pip install argus-ops[web]
+serve:
+  host: 127.0.0.1
+  port: 8080
+  reload_interval: 30    # seconds between browser auto-refresh polls
+  watch_interval: 30     # seconds between background cluster scans
+  open_browser: true     # auto-open browser when server starts
+  ai_diagnosis: false    # run AI diagnosis on every scan cycle (expensive - opt-in)
 """

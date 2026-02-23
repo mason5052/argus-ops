@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus-Ops Dashboard</title>
+  <style>
+    :root {
+      --green-dark:   #003628;
+      --green-mid:    #00694e;
+      --green-soft:   #f2f7f0;
+      --gold:         #bd975f;
+      --body-text:    #4d4d4d;
+      --card-border:  #c8ddd6;
+      --info-bg:      #eaf2ee;
+      --info-border:  #a8cfc0;
+      --notice-bg:    #fdf6ec;
+      --notice-border:#d4a85a;
+      --notice-text:  #7a5520;
+      --footer-bg:    #d8ebe3;
+      --footer-text:  #5a7a6e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      background: var(--green-soft);
+      color: var(--body-text);
+    }
+
+    /* Header */
+    header {
+      background: var(--green-dark);
+      color: white;
+      padding: 0.85rem 2rem;
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+    }
+    header h1 { margin: 0; font-size: 1.3rem; }
+    header .subtitle { color: #8ec8b0; font-size: 0.82rem; }
+
+    /* Status bar */
+    #status-bar {
+      background: var(--info-bg);
+      border-bottom: 1px solid var(--info-border);
+      padding: 0.35rem 2rem;
+      font-size: 0.82rem;
+      color: var(--green-dark);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+    }
+    #error-msg { color: #c0392b; font-weight: bold; display: none; }
+
+    /* Nav tabs */
+    nav {
+      background: var(--green-mid);
+      display: flex;
+      padding: 0 1rem;
+    }
+    nav button {
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: #b8e0d0;
+      padding: 0.65rem 1.25rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    nav button:hover { background: #005a40; }
+    nav button.active {
+      background: var(--green-soft);
+      color: var(--green-dark);
+      border-bottom: 3px solid var(--gold);
+      font-weight: bold;
+    }
+
+    /* Tab content */
+    .tab-content { display: none; padding: 1.5rem 2rem; }
+    .tab-content.active { display: block; }
+
+    h2 {
+      color: var(--green-dark);
+      border-bottom: 2px solid var(--gold);
+      padding-bottom: 0.3rem;
+      margin-top: 0;
+    }
+    h3 { color: var(--green-mid); margin: 0 0 0.5rem 0; }
+
+    /* Summary line */
+    .summary {
+      background: var(--info-bg);
+      border: 1px solid var(--info-border);
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      color: var(--green-dark);
+    }
+
+    /* Findings table */
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 4px; overflow: hidden; }
+    th {
+      background: var(--green-dark);
+      color: white;
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      font-weight: normal;
+      font-size: 0.85rem;
+    }
+    td { padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--card-border); font-size: 0.85rem; }
+    tr:nth-child(even) td { background: #f7fbf9; }
+    tr:hover td { background: #edf5f1; }
+    td code { font-size: 0.82rem; background: #f0f0f0; padding: 1px 4px; border-radius: 2px; }
+
+    /* Severity badges */
+    .sev {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .sev-critical { background: #c0392b; color: white; }
+    .sev-high     { background: #e67e22; color: white; }
+    .sev-medium   { background: #e6b800; color: #333; }
+    .sev-low      { background: #27ae60; color: white; }
+    .sev-info     { background: #7f8c8d; color: white; }
+
+    /* Node grid */
+    .node-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .node-card {
+      background: white;
+      border: 1px solid var(--card-border);
+      border-top: 3px solid var(--gold);
+      border-radius: 4px;
+      padding: 1rem;
+      min-width: 200px;
+      max-width: 260px;
+    }
+    .node-card.ready    { border-top-color: #27ae60; }
+    .node-card.not-ready { border-top-color: #c0392b; }
+    .node-card .node-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-bottom: 0.5rem;
+    }
+    .node-card .badge-ready     { background: #27ae60; color: white; }
+    .node-card .badge-not-ready { background: #c0392b; color: white; }
+    .node-card .node-meta { font-size: 0.8rem; color: #666; margin: 0.2rem 0; }
+    .node-card .cond-list { margin-top: 0.5rem; font-size: 0.8rem; }
+    .node-card .cond-item { display: flex; justify-content: space-between; padding: 2px 0; }
+    .cond-true  { color: #c0392b; font-weight: bold; }
+    .cond-false { color: #27ae60; }
+
+    /* Diagnosis cards */
+    .diagnosis-card {
+      background: white;
+      border: 1px solid var(--card-border);
+      border-left: 4px solid var(--gold);
+      border-radius: 4px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .diagnosis-card .diag-meta { font-size: 0.8rem; color: var(--footer-text); margin-bottom: 0.5rem; }
+    .diagnosis-card .diag-severity { font-weight: bold; }
+    .diagnosis-card .diag-root-cause { font-weight: bold; color: var(--green-dark); font-size: 1rem; margin-bottom: 0.4rem; }
+    .diagnosis-card .diag-explanation { margin-bottom: 0.6rem; line-height: 1.5; }
+    .diagnosis-card .diag-recs h4 { color: var(--green-mid); margin: 0 0 0.3rem 0; font-size: 0.9rem; }
+    .diagnosis-card .diag-recs ul { margin: 0; padding-left: 1.2rem; }
+    .diagnosis-card .diag-recs li { margin-bottom: 0.25rem; font-size: 0.85rem; }
+
+    /* Trend chart */
+    #trend-canvas {
+      width: 100%;
+      max-width: 900px;
+      height: 220px;
+      background: white;
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      display: block;
+    }
+    .trend-legend {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.82rem;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 2px; }
+
+    /* Empty state */
+    .empty-state {
+      background: white;
+      border: 1px dashed var(--card-border);
+      border-radius: 4px;
+      padding: 2rem;
+      text-align: center;
+      color: #888;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--footer-bg);
+      border-top: 1px solid var(--info-border);
+      color: var(--footer-text);
+      text-align: center;
+      padding: 0.65rem;
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Argus-Ops Dashboard</h1>
+  <span class="subtitle">AI-powered Kubernetes monitoring -- v{{ version }}</span>
+</header>
+
+<div id="status-bar">
+  <span>Last scan: <strong id="last-scan">--</strong></span>
+  <span id="error-msg"></span>
+  <span>Next refresh in <strong><span id="countdown">{{ reload_interval }}</span>s</strong></span>
+</div>
+
+<nav id="tab-nav">
+  <button class="active" onclick="showTab(event, 'findings')">Findings</button>
+  <button onclick="showTab(event, 'nodes')">Node Health</button>
+  <button onclick="showTab(event, 'diagnoses')">AI Diagnoses</button>
+  <button onclick="showTab(event, 'trend')">Severity Trend</button>
+</nav>
+
+<!-- TAB: Findings -->
+<div id="tab-findings" class="tab-content active">
+  <h2>Live Findings</h2>
+  <div id="findings-summary" class="summary">Loading...</div>
+  <table>
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th>Category</th>
+        <th>Title</th>
+        <th>Target</th>
+        <th>Detected</th>
+      </tr>
+    </thead>
+    <tbody id="findings-tbody">
+      <tr><td colspan="5" style="text-align:center;color:#888;">Waiting for first scan...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- TAB: Node Health -->
+<div id="tab-nodes" class="tab-content">
+  <h2>Node Health</h2>
+  <div id="node-summary" class="summary">Loading...</div>
+  <div id="node-grid" class="node-grid">
+    <div class="empty-state">Waiting for first scan...</div>
+  </div>
+</div>
+
+<!-- TAB: AI Diagnoses -->
+<div id="tab-diagnoses" class="tab-content">
+  <h2>AI Diagnosis History</h2>
+  <div id="diagnoses-list">
+    <div class="empty-state">
+      No AI diagnoses yet.<br>
+      Enable <code>ai_diagnosis: true</code> in <code>~/.argus-ops/config.yaml</code>
+      to generate diagnoses on every scan cycle, or run <code>argus-ops diagnose</code>
+      manually.
+    </div>
+  </div>
+</div>
+
+<!-- TAB: Severity Trend -->
+<div id="tab-trend" class="tab-content">
+  <h2>Severity Trend</h2>
+  <canvas id="trend-canvas"></canvas>
+  <div class="trend-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div>Critical</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e67e22"></div>High</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e6b800"></div>Medium</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div>Low</div>
+  </div>
+  <p style="font-size:0.82rem;color:#888;margin-top:0.75rem">
+    Showing up to 60 minutes of scan history (one point per scan cycle).
+  </p>
+</div>
+
+<footer>
+  Argus-Ops v{{ version }} -- Auto-refreshes every {{ reload_interval }}s --
+  <a href="/docs" style="color:var(--green-mid)">API Docs</a>
+</footer>
+
+<script>
+const RELOAD_INTERVAL = {{ reload_interval }};
+let countdown = RELOAD_INTERVAL;
+let activeTab = 'findings';
+
+// ---- Tab switching ----
+function showTab(event, name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#tab-nav button').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  activeTab = name;
+}
+
+// ---- Severity badge ----
+function sevBadge(sev) {
+  return `<span class="sev sev-${sev}">${sev}</span>`;
+}
+
+// ---- Format ISO timestamp to local time ----
+function fmtTime(iso) {
+  if (!iso) return '--';
+  return new Date(iso).toLocaleTimeString();
+}
+
+// ---- Update status bar ----
+function updateStatus(lastScan, error) {
+  document.getElementById('last-scan').textContent = fmtTime(lastScan);
+  const errEl = document.getElementById('error-msg');
+  if (error) {
+    errEl.style.display = '';
+    errEl.textContent = 'Error: ' + error;
+  } else {
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+  }
+}
+
+// ---- Fetch and render findings ----
+async function loadFindings() {
+  let data;
+  try {
+    const res = await fetch('/api/scan');
+    data = await res.json();
+  } catch (e) {
+    return;
+  }
+
+  updateStatus(data.last_scan, data.error);
+
+  const tbody = document.getElementById('findings-tbody');
+  const summary = document.getElementById('findings-summary');
+
+  if (!data.findings || data.findings.length === 0) {
+    summary.textContent = 'No findings detected. Infrastructure looks healthy.';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#27ae60;">No issues found</td></tr>';
+    return;
+  }
+
+  // Sort by severity descending
+  const sevOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+  data.findings.sort((a, b) => (sevOrder[a.severity] || 4) - (sevOrder[b.severity] || 4));
+
+  const counts = {};
+  data.findings.forEach(f => { counts[f.severity] = (counts[f.severity] || 0) + 1; });
+  const countStr = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(', ');
+  summary.textContent = `${data.total} finding(s): ${countStr}`;
+
+  tbody.innerHTML = data.findings.map(f => `
+    <tr>
+      <td>${sevBadge(f.severity)}</td>
+      <td>${f.category.replace('_', ' ')}</td>
+      <td>${escHtml(f.title)}</td>
+      <td><code>${escHtml(f.target)}</code></td>
+      <td>${fmtTime(f.timestamp)}</td>
+    </tr>
+  `).join('');
+}
+
+// ---- Fetch and render nodes ----
+async function loadNodes() {
+  let data;
+  try {
+    const res = await fetch('/api/nodes');
+    data = await res.json();
+  } catch (e) {
+    return;
+  }
+
+  const grid = document.getElementById('node-grid');
+  const summary = document.getElementById('node-summary');
+
+  if (!data.nodes || data.nodes.length === 0) {
+    summary.textContent = 'No nodes discovered yet.';
+    grid.innerHTML = '<div class="empty-state">Waiting for first scan...</div>';
+    return;
+  }
+
+  summary.textContent = `${data.ready} / ${data.total} nodes ready`;
+
+  grid.innerHTML = data.nodes.map(node => {
+    const ready = node.conditions && node.conditions.Ready && node.conditions.Ready.status === 'True';
+    const cls = ready ? 'ready' : 'not-ready';
+    const badgeCls = ready ? 'badge-ready' : 'badge-not-ready';
+    const badgeText = ready ? 'Ready' : 'Not Ready';
+
+    const condItems = Object.entries(node.conditions || {}).map(([k, v]) => {
+      // For Ready: True is good. For pressure conditions: True is bad.
+      const isPressure = k !== 'Ready';
+      const isProblematic = isPressure ? v.status === 'True' : v.status !== 'True';
+      const cls = isProblematic ? 'cond-true' : 'cond-false';
+      return `<div class="cond-item"><span>${k}</span><span class="${cls}">${v.status}</span></div>`;
+    }).join('');
+
+    return `
+      <div class="node-card ${cls}">
+        <div>
+          <span class="node-badge ${badgeCls}">${badgeText}</span>
+        </div>
+        <h3>${escHtml(node.name)}</h3>
+        <div class="node-meta">OS: ${node.os || 'unknown'} / ${node.arch || 'unknown'}</div>
+        ${node.unschedulable ? '<div class="node-meta" style="color:#c0392b">Cordoned (unschedulable)</div>' : ''}
+        <div class="cond-list">${condItems}</div>
+      </div>`;
+  }).join('');
+}
+
+// ---- Fetch and render diagnoses ----
+async function loadDiagnoses() {
+  let data;
+  try {
+    const res = await fetch('/api/diagnoses');
+    data = await res.json();
+  } catch (e) {
+    return;
+  }
+
+  const list = document.getElementById('diagnoses-list');
+
+  if (!data.incidents || data.total === 0) {
+    list.innerHTML = `
+      <div class="empty-state">
+        No AI diagnoses yet.<br>
+        Enable <code>ai_diagnosis: true</code> in <code>~/.argus-ops/config.yaml</code>
+        to generate diagnoses on every scan cycle, or run <code>argus-ops diagnose</code> manually.
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = data.incidents.map(inc => {
+    const d = inc.diagnosis;
+    if (!d) {
+      return `<div class="diagnosis-card">
+        <div class="diag-meta">Incident ${escHtml(inc.incident_id)} -- ${fmtTime(inc.created_at)} -- No AI diagnosis</div>
+      </div>`;
+    }
+    const recs = (d.recommendations || []).map(r =>
+      `<li>${escHtml(r)}</li>`).join('');
+    const confidence = d.confidence != null ? `${(d.confidence * 100).toFixed(0)}%` : 'N/A';
+    return `
+      <div class="diagnosis-card">
+        <div class="diag-meta">
+          Incident <strong>${escHtml(inc.incident_id)}</strong> --
+          ${fmtTime(inc.created_at)} --
+          ${sevBadge(inc.max_severity)} --
+          Confidence: ${confidence} --
+          Model: ${escHtml(d.model_used || 'unknown')}
+        </div>
+        <div class="diag-root-cause">${escHtml(d.root_cause)}</div>
+        <div class="diag-explanation">${escHtml(d.explanation)}</div>
+        ${recs ? `<div class="diag-recs"><h4>Recommendations</h4><ul>${recs}</ul></div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+// ---- Fetch and render trend chart ----
+let trendData = [];
+
+async function loadTrend() {
+  let data;
+  try {
+    const res = await fetch('/api/trend');
+    data = await res.json();
+  } catch (e) {
+    return;
+  }
+  trendData = data.trend || [];
+  drawTrend();
+}
+
+function drawTrend() {
+  const canvas = document.getElementById('trend-canvas');
+  if (!canvas) return;
+  const points = trendData;
+  const W = canvas.clientWidth || 900;
+  canvas.width = W;
+  canvas.height = 220;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, canvas.height);
+
+  if (points.length < 2) {
+    ctx.fillStyle = '#888';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for data...', W / 2, canvas.height / 2);
+    return;
+  }
+
+  const H = canvas.height;
+  const PAD_T = 15, PAD_B = 20, PAD_L = 35, PAD_R = 15;
+  const chartW = W - PAD_L - PAD_R;
+  const chartH = H - PAD_T - PAD_B;
+
+  const sevKeys = ['critical', 'high', 'medium', 'low'];
+  const colors = { critical: '#c0392b', high: '#e67e22', medium: '#e6b800', low: '#27ae60' };
+
+  const maxVal = Math.max(1, ...points.flatMap(p => sevKeys.map(s => p[s] || 0)));
+  const scaleX = chartW / (points.length - 1);
+  const scaleY = chartH / maxVal;
+
+  // Grid lines
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD_T + chartH - (chartH * i / 4);
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(W - PAD_R, y);
+    ctx.stroke();
+    ctx.fillStyle = '#888';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round(maxVal * i / 4), PAD_L - 4, y + 4);
+  }
+
+  // Lines per severity
+  sevKeys.forEach(sev => {
+    ctx.beginPath();
+    ctx.strokeStyle = colors[sev];
+    ctx.lineWidth = 2;
+    points.forEach((p, i) => {
+      const x = PAD_L + i * scaleX;
+      const y = PAD_T + chartH - ((p[sev] || 0) * scaleY);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  });
+
+  // X-axis labels (first and last timestamps)
+  if (points.length > 0) {
+    ctx.fillStyle = '#888';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(fmtTime(points[0].ts), PAD_L, H - 4);
+    ctx.textAlign = 'right';
+    ctx.fillText(fmtTime(points[points.length - 1].ts), W - PAD_R, H - 4);
+  }
+}
+
+// ---- Escape HTML ----
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ---- Refresh all tabs ----
+async function refreshAll() {
+  await Promise.all([
+    loadFindings(),
+    loadNodes(),
+    loadDiagnoses(),
+    loadTrend(),
+  ]);
+}
+
+// ---- Countdown timer ----
+function tick() {
+  countdown--;
+  document.getElementById('countdown').textContent = Math.max(0, countdown);
+  if (countdown <= 0) {
+    countdown = RELOAD_INTERVAL;
+    refreshAll();
+  }
+}
+
+// Initial load + start timers
+refreshAll();
+setInterval(tick, 1000);
+window.addEventListener('resize', drawTrend);
+</script>
+
+</body>
+</html>
