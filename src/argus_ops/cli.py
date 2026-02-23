@@ -341,8 +341,13 @@ def serve(
         click.echo("Kubernetes target is disabled in config.", err=True)
         sys.exit(1)
 
+    # Initialize AI provider if an API key is available.
+    # ai_diagnosis flag in config controlled the old auto-mode; for on-demand diagnosis
+    # via the dashboard button we only need the key to be present.
     ai_provider = None
-    if serve_cfg.get("ai_diagnosis", False):
+    import os
+    ai_key_env = cfg.get("ai", {}).get("api_key_env", "OPENAI_API_KEY")
+    if os.environ.get(ai_key_env):
         from argus_ops.ai.provider import LiteLLMProvider
         ai_provider = LiteLLMProvider(config=cfg["ai"])
 
@@ -366,7 +371,9 @@ def serve(
     click.echo(f"Watch interval:      {_watch_interval}s (background scan)")
     click.echo(f"Reload interval:     {_reload_interval}s (browser refresh)")
     if ai_provider:
-        click.echo(f"AI diagnosis:        enabled ({cfg['ai']['model']})")
+        click.echo(f"AI diagnosis:        on-demand ({cfg['ai']['model']})")
+    else:
+        click.echo(f"AI diagnosis:        disabled (set {ai_key_env} to enable)")
     click.echo("Press Ctrl+C to stop.")
 
     if _open_browser:

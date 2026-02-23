@@ -52,4 +52,4 @@ data:
       reload_interval: 30
       watch_interval: 60    # scan every 60s in production
       open_browser: false
-      ai_diagnosis: false   # enable with OPENAI_API_KEY to activate
+      ai_diagnosis: false   # on-demand only: use "Run AI Diagnosis" button in dashboard

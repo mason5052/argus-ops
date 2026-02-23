@@ -1,9 +1,15 @@
 # Argus-Ops
 
+[![CI](https://github.com/mason5052/argus-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/mason5052/argus-ops/actions/workflows/ci.yml)
+[![PyPI version](https://badge.fury.io/py/argus-ops.svg)](https://badge.fury.io/py/argus-ops)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/mason5052/argus-ops/graph/badge.svg)](https://codecov.io/gh/mason5052/argus-ops)
+
 AI-powered infrastructure monitoring CLI that detects issues, diagnoses root causes,
 and (coming soon) executes remediation across Kubernetes, VMs, and bare metal servers.
 
-```
+```bash
 pip install argus-ops
 argus-ops scan
 argus-ops diagnose
@@ -24,22 +30,49 @@ Argus-Ops fills that gap.
 
 ## Architecture
 
-```
-[1] COLLECT      ->  [2] ANALYZE      ->  [3] DIAGNOSE     ->  [4] REPORT
-K8s collector        Rule-based checks     LiteLLM AI call      Rich console
-(pods, nodes,        (thresholds,          (root cause,         or JSON
- events)              patterns)             recommendations)
+```mermaid
+flowchart LR
+    subgraph Collect
+        K8s[K8s Collector\npods / nodes / events\ndeployments / CronJobs]
+    end
+
+    subgraph Analyze
+        PA[PodHealth\nAnalyzer]
+        NA[NodeHealth\nAnalyzer]
+        RA[Resource\nAnalyzer]
+    end
+
+    subgraph AI Diagnose
+        CB[Circuit Breaker\n+ Retry]
+        LLM[LiteLLM\n100+ providers]
+        PV[Pydantic\nvalidation]
+    end
+
+    subgraph Report
+        RC[Rich Console\n+ JSON]
+        API[FastAPI\nDashboard]
+        DB[(SQLite\nIncidentStore)]
+    end
+
+    K8s --> PA & NA & RA
+    PA & NA & RA --> CB
+    CB --> LLM --> PV --> RC
+    PV --> DB --> API
 ```
 
 The pipeline is modular -- each stage uses pluggable abstract base classes,
-so you can add custom collectors, analyzers, or AI providers.
+so you can add custom collectors, analyzers, or AI providers without touching core code.
 
 ## Quick Start
 
 ### Install
 
 ```bash
+# Core CLI
 pip install argus-ops
+
+# With web dashboard
+pip install "argus-ops[web]"
 ```
 
 ### Configure
@@ -72,6 +105,9 @@ argus-ops scan --output json | jq '.[] | select(.severity == "critical")'
 argus-ops diagnose --model gpt-4o
 argus-ops diagnose --model claude-sonnet-4-6
 argus-ops diagnose --model ollama/llama3.2   # local, no API key needed
+
+# Web dashboard (requires argus-ops[web])
+argus-ops serve
 ```
 
 ## Supported AI Providers
@@ -148,23 +184,54 @@ ARGUS_OPS_AI_BASE_URL=http://localhost:11434 argus-ops diagnose --model ollama/l
 
 ```
 src/argus_ops/
-  cli.py              - Click CLI (scan, diagnose, config commands)
+  cli.py              - Click CLI (scan, diagnose, config, serve commands)
   config.py           - YAML + env var config loader
   models.py           - Pydantic data models (Finding, Diagnosis, Incident)
-  collectors/         - Infrastructure data collection (K8s, SSH, Docker)
-  analyzers/          - Rule-based anomaly detection (resource, pod, node)
+  store.py            - SQLite incident history (WAL mode, survives restarts)
+  logging_config.py   - JSON-structured logging + RotatingFileHandler
+  collectors/         - Infrastructure data collection
+    base.py           - BaseCollector ABC
+    k8s.py            - Kubernetes collector (timeout, event redaction)
+  analyzers/          - Rule-based anomaly detection
+    base.py           - BaseAnalyzer ABC
+    pod_health.py     - CrashLoopBackOff, OOMKilled, Pending, ImagePullBackOff
+    node_health.py    - NotReady, pressure conditions, cordoned nodes
+    resource.py       - Missing CPU/memory limits, allocation ratios
   ai/                 - LiteLLM AI provider + Jinja2 prompt templates
+    provider.py       - LiteLLM with Pydantic validation, 32 KB response limit
+    cost.py           - Token/cost tracking (Decimal arithmetic)
+  engine/
+    pipeline.py       - Collect->Analyze->Diagnose with retry + circuit breaker
   reporters/          - Rich console + JSON output formatters
-  engine/             - Pipeline orchestration (collect -> analyze -> diagnose)
+  web/
+    api.py            - FastAPI endpoints
+    watch_service.py  - Background scan loop + DiagnoseStatus enum
 tests/
   conftest.py         - Shared fixtures (mock K8s snapshots, findings)
   fixtures/           - JSON mock data for offline testing
   test_analyzers.py   - 15 analyzer tests
   test_models.py      - 9 model tests
   test_config.py      - 9 config tests
-  test_pipeline.py    - 9 pipeline tests
+  test_pipeline.py    - 15 pipeline tests (incl. circuit breaker)
   test_reporters.py   - 5 reporter tests
+  test_store.py       - 16 SQLite store tests
+  test_cli.py         - 19 CLI tests
+  test_api.py         - 23 API endpoint tests
+deploy/k8s/           - Kubernetes deployment manifests
 ```
+
+## Reliability Features
+
+Argus-Ops is built for production use:
+
+- **Exponential backoff retry** (tenacity): each collector retries up to 3 times with 2s -> 4s -> 8s wait before reporting failure
+- **Circuit breaker** per collector: after 3 consecutive failures, the circuit opens for 60 seconds to prevent thundering-herd API calls against an unreachable cluster
+- **K8s API timeouts**: all Kubernetes API calls use a 30-second timeout
+- **LLM timeouts**: all LiteLLM completion calls use a 60-second timeout
+- **LLM response validation**: responses are parsed through a Pydantic model with a 32 KB size limit
+- **Event message redaction**: Bearer tokens, private registry credentials, and RFC-1918 IPs are stripped before sending to AI providers
+- **SQLite incident history**: incidents persist across restarts with WAL journal mode
+- **JSON structured logging**: machine-readable logs with RotatingFileHandler (10 MB / 5 backups)
 
 ## Extending Argus-Ops
 
@@ -206,10 +273,6 @@ class MyAnalyzer(BaseAnalyzer):
     def name(self) -> str:
         return "my_analyzer"
 
-    @property
-    def category(self) -> FindingCategory:
-        return FindingCategory.CUSTOM
-
     def analyze(self, snapshots: list[HealthSnapshot]) -> list[Finding]:
         findings = []
         for snapshot in snapshots:
@@ -221,19 +284,20 @@ class MyAnalyzer(BaseAnalyzer):
 ## Roadmap
 
 - [x] v0.1.0 - K8s scan + AI diagnosis + Rich console output
-- [ ] v0.2.0 - SSH collector (bare metal/VMs) + Slack/Teams/Email notifications
-- [ ] v0.3.0 - Remediation engine with human approval gate
-- [ ] v0.4.0 - Watch mode (continuous monitoring) + incident history
+- [x] v0.2.0 - Security hardening (timeouts, event redaction, LLM response validation)
+- [x] v0.3.0 - Reliability hardening (circuit breaker, retry, SQLite history, 109 tests)
+- [ ] v0.4.0 - SSH collector (bare metal/VMs) + Slack/Teams notifications
+- [ ] v0.5.0 - Remediation engine with human approval gate (K8s Healer)
 - [ ] v1.0.0 - Helm chart, Docker Hub image, stable API
 
 ## Contributing
 
-1. Fork the repo and create a feature branch
-2. Write tests for your changes
-3. Run `ruff check src/ tests/` and `pytest` before submitting
-4. Open a PR with a clear description of the change
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide: dev environment setup,
+how to add collectors and analyzers, test requirements, and PR checklist.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Author
 

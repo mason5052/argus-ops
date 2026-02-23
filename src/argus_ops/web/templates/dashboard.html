@@ -57,6 +57,35 @@
     }
     #error-msg { color: #c0392b; font-weight: bold; display: none; }
 
+    /* Interval settings inline form */
+    .interval-form {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .interval-form label { white-space: nowrap; }
+    .interval-input {
+      width: 60px;
+      padding: 2px 5px;
+      border: 1px solid var(--info-border);
+      border-radius: 3px;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+    .interval-btn {
+      background: var(--green-mid);
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 3px 10px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .interval-btn:hover { background: var(--green-dark); }
+    #settings-msg { font-size: 0.78rem; color: var(--green-mid); }
+
     /* Nav tabs */
     nav {
       background: var(--green-mid);
@@ -184,6 +213,29 @@
     .diagnosis-card .diag-recs ul { margin: 0; padding-left: 1.2rem; }
     .diagnosis-card .diag-recs li { margin-bottom: 0.25rem; font-size: 0.85rem; }
 
+    /* AI diagnose button */
+    .diagnose-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .btn-diagnose {
+      background: var(--green-dark);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 0.5rem 1.25rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-diagnose:hover:not(:disabled) { background: var(--green-mid); }
+    .btn-diagnose:disabled { opacity: 0.55; cursor: not-allowed; }
+    #diagnose-status { font-size: 0.85rem; color: var(--footer-text); }
+    #diagnose-status.running { color: var(--green-mid); font-style: italic; }
+    #diagnose-status.error   { color: #c0392b; }
+
     /* Trend chart */
     #trend-canvas {
       width: 100%;
@@ -234,6 +286,16 @@
 <div id="status-bar">
   <span>Last scan: <strong id="last-scan">--</strong></span>
   <span id="error-msg"></span>
+  <div class="interval-form">
+    <label>Scan every
+      <input id="input-watch" class="interval-input" type="number" min="10" max="3600" value="{{ reload_interval }}">s
+    </label>
+    <label>Refresh every
+      <input id="input-reload" class="interval-input" type="number" min="5" max="3600" value="{{ reload_interval }}">s
+    </label>
+    <button class="interval-btn" onclick="applySettings()">Apply</button>
+    <span id="settings-msg"></span>
+  </div>
   <span>Next refresh in <strong><span id="countdown">{{ reload_interval }}</span>s</strong></span>
 </div>
 
@@ -275,14 +337,15 @@
 
 <!-- TAB: AI Diagnoses -->
 <div id="tab-diagnoses" class="tab-content">
-  <h2>AI Diagnosis History</h2>
+  <h2>AI Diagnosis</h2>
+  <div class="diagnose-bar">
+    <button id="btn-diagnose" class="btn-diagnose" onclick="runDiagnose()">
+      Run AI Diagnosis
+    </button>
+    <span id="diagnose-status">Click to analyze current findings with GPT-4o-mini.</span>
+  </div>
   <div id="diagnoses-list">
-    <div class="empty-state">
-      No AI diagnoses yet.<br>
-      Enable <code>ai_diagnosis: true</code> in <code>~/.argus-ops/config.yaml</code>
-      to generate diagnoses on every scan cycle, or run <code>argus-ops diagnose</code>
-      manually.
-    </div>
+    <div class="empty-state">No diagnoses yet. Click "Run AI Diagnosis" above.</div>
   </div>
 </div>
 
@@ -307,7 +370,7 @@
 </footer>
 
 <script>
-const RELOAD_INTERVAL = {{ reload_interval }};
+let RELOAD_INTERVAL = {{ reload_interval }};
 let countdown = RELOAD_INTERVAL;
 let activeTab = 'findings';
 
@@ -446,12 +509,7 @@ async function loadDiagnoses() {
   const list = document.getElementById('diagnoses-list');
 
   if (!data.incidents || data.total === 0) {
-    list.innerHTML = `
-      <div class="empty-state">
-        No AI diagnoses yet.<br>
-        Enable <code>ai_diagnosis: true</code> in <code>~/.argus-ops/config.yaml</code>
-        to generate diagnoses on every scan cycle, or run <code>argus-ops diagnose</code> manually.
-      </div>`;
+    list.innerHTML = '<div class="empty-state">No diagnoses yet. Click "Run AI Diagnosis" above.</div>';
     return;
   }
 
@@ -595,7 +653,88 @@ function tick() {
   }
 }
 
+// ---- On-demand AI diagnosis ----
+async function runDiagnose() {
+  const btn = document.getElementById('btn-diagnose');
+  const statusEl = document.getElementById('diagnose-status');
+
+  btn.disabled = true;
+  statusEl.className = 'running';
+  statusEl.textContent = 'Calling GPT-4o-mini... this may take 5-15 seconds.';
+
+  try {
+    const res = await fetch('/api/diagnose', { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      statusEl.className = 'error';
+      statusEl.textContent = 'Error: ' + (data.detail || res.statusText);
+      return;
+    }
+
+    if (data.total === 0) {
+      statusEl.className = '';
+      statusEl.textContent = 'No findings to diagnose. Run a scan first.';
+    } else {
+      statusEl.className = '';
+      statusEl.textContent = `Done. ${data.total} incident(s) added.`;
+    }
+
+    // Refresh the diagnoses list from server state
+    await loadDiagnoses();
+  } catch (e) {
+    statusEl.className = 'error';
+    statusEl.textContent = 'Request failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---- Load current settings from server and sync inputs ----
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    const data = await res.json();
+    document.getElementById('input-watch').value = data.watch_interval;
+    document.getElementById('input-reload').value = data.reload_interval;
+    RELOAD_INTERVAL = data.reload_interval;
+  } catch (e) { /* ignore */ }
+}
+
+// ---- Apply interval settings ----
+async function applySettings() {
+  const watchVal = parseInt(document.getElementById('input-watch').value, 10);
+  const reloadVal = parseInt(document.getElementById('input-reload').value, 10);
+  const msgEl = document.getElementById('settings-msg');
+
+  if (isNaN(watchVal) || watchVal < 10 || isNaN(reloadVal) || reloadVal < 5) {
+    msgEl.style.color = '#c0392b';
+    msgEl.textContent = 'Invalid value (min: scan=10s, refresh=5s)';
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ watch_interval: watchVal, reload_interval: reloadVal }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      RELOAD_INTERVAL = data.reload_interval;
+      countdown = RELOAD_INTERVAL;
+      msgEl.style.color = 'var(--green-mid)';
+      msgEl.textContent = 'Applied';
+      setTimeout(() => { msgEl.textContent = ''; }, 2000);
+    }
+  } catch (e) {
+    msgEl.style.color = '#c0392b';
+    msgEl.textContent = 'Failed to apply';
+  }
+}
+
 // Initial load + start timers
+loadSettings();
 refreshAll();
 setInterval(tick, 1000);
 window.addEventListener('resize', drawTrend);

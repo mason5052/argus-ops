@@ -26,18 +26,17 @@ spec:
         node-pool: dashboard
       containers:
         - name: argus-ops
-          image: localhost:30500/monitoring/argus-ops:0.2.0
+          image: localhost:30500/monitoring/argus-ops:0.2.3
           ports:
             - containerPort: 8080
           env:
             - name: ARGUS_OPS_LOG_LEVEL
               value: "INFO"
-            # Uncomment and set to enable AI diagnosis:
-            # - name: OPENAI_API_KEY
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: argus-ops-secrets
-            #       key: openai-api-key
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: argus-ops-secrets
+                  key: openai-api-key
           volumeMounts:
             - name: config
               mountPath: /home/argus/.argus-ops
