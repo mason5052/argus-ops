@@ -1,0 +1,30 @@
+apiVersion: v1
+entries:
+  argus-ops:
+  - annotations:
+      artifacthub.io/category: monitoring-logging
+      artifacthub.io/license: MIT
+    apiVersion: v2
+    appVersion: 0.3.0
+    created: "2026-02-23T14:12:04.9891136-05:00"
+    description: AI-powered infrastructure monitoring CLI (Kubernetes deployment)
+    digest: 6a7e44e64b861810e442653a3af5b173aa529433f7ee060cfe0e5415dd38c73f
+    home: https://github.com/mason5052/argus-ops
+    keywords:
+    - aiops
+    - monitoring
+    - kubernetes
+    - observability
+    - sre
+    maintainers:
+    - email: ehehwnwjs5052@gmail.com
+      name: Mason Kim
+      url: https://github.com/mason5052
+    name: argus-ops
+    sources:
+    - https://github.com/mason5052/argus-ops
+    type: application
+    urls:
+    - https://mason5052.github.io/argus-ops/argus-ops-0.3.0.tgz
+    version: 0.3.0
+generated: "2026-02-23T14:12:04.9882399-05:00"
