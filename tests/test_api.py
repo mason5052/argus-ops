@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,8 +18,7 @@ from argus_ops.models import (
     Severity,
 )
 from argus_ops.web.api import create_app
-from argus_ops.web.watch_service import DiagnoseStatus, WatchService
-
+from argus_ops.web.watch_service import WatchService
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -206,8 +205,10 @@ class TestApiDiagnoses:
 class TestApiTrend:
     def test_trend_returns_data_points(self, client, mock_watch):
         trend = [
-            {"ts": "2026-02-23T10:00:00Z", "critical": 0, "high": 2, "medium": 1, "low": 0, "info": 3},
-            {"ts": "2026-02-23T10:00:30Z", "critical": 1, "high": 2, "medium": 1, "low": 0, "info": 3},
+            {"ts": "2026-02-23T10:00:00Z", "critical": 0, "high": 2, "medium": 1, "low": 0,
+             "info": 3},
+            {"ts": "2026-02-23T10:00:30Z", "critical": 1, "high": 2, "medium": 1, "low": 0,
+             "info": 3},
         ]
         mock_watch.get_state.return_value = _make_watch_state(trend=trend)
         resp = client.get("/api/trend")

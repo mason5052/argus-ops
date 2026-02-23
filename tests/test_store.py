@@ -141,7 +141,8 @@ class TestIncidentStoreLoad:
 
 class TestTrendStore:
     def test_save_and_load_trend(self, store):
-        point = {"ts": "2026-02-23T10:00:00Z", "critical": 2, "high": 3, "medium": 1, "low": 0, "info": 5}
+        point = {"ts": "2026-02-23T10:00:00Z", "critical": 2, "high": 3, "medium": 1, "low": 0,
+                 "info": 5}
         store.save_trend_point(point)
         trend = store.load_trend()
         assert len(trend) == 1
@@ -172,7 +173,10 @@ class TestTrendStore:
 class TestClear:
     def test_clear_removes_all(self, store, sample_incident):
         store.save_incident(sample_incident)
-        store.save_trend_point({"ts": "2026-02-23T10:00:00Z", "critical": 1, "high": 0, "medium": 0, "low": 0, "info": 0})
+        store.save_trend_point(
+            {"ts": "2026-02-23T10:00:00Z", "critical": 1, "high": 0, "medium": 0, "low": 0,
+             "info": 0}
+        )
         store.clear()
         assert store.count_incidents() == 0
         assert store.load_trend() == []
