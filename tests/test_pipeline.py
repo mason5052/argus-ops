@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from argus_ops.engine.pipeline import Pipeline
 from argus_ops.models import (
     Diagnosis,
@@ -147,3 +149,93 @@ class TestPipelineRunFull:
 
         incidents = pipeline.run_full()
         assert incidents == []
+
+
+class TestCircuitBreaker:
+    def test_circuit_starts_closed(self):
+        from argus_ops.engine.pipeline import CollectorCircuitBreaker
+        cb = CollectorCircuitBreaker(name="test", failure_threshold=3)
+        assert cb.state == "CLOSED"
+
+    def test_circuit_opens_after_threshold(self):
+        from argus_ops.engine.pipeline import CircuitOpen, CollectorCircuitBreaker
+
+        cb = CollectorCircuitBreaker(name="test", failure_threshold=3, reset_timeout=9999)
+
+        def _fail():
+            raise RuntimeError("boom")
+
+        for _ in range(3):
+            with pytest.raises(RuntimeError):
+                cb.call(_fail)
+
+        assert cb.state == "OPEN"
+
+    def test_circuit_open_rejects_calls(self):
+        from argus_ops.engine.pipeline import CircuitOpen, CollectorCircuitBreaker
+
+        cb = CollectorCircuitBreaker(name="test", failure_threshold=1, reset_timeout=9999)
+
+        def _fail():
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            cb.call(_fail)
+
+        assert cb.state == "OPEN"
+        with pytest.raises(CircuitOpen):
+            cb.call(lambda: None)
+
+    def test_circuit_half_open_after_timeout(self):
+        from unittest.mock import MagicMock
+        from argus_ops.engine.pipeline import CollectorCircuitBreaker
+
+        mock_time = MagicMock()
+        # Call sequence:
+        #   [0] _record_failure() sets _opened_at = 0.0  (circuit opens)
+        #   [1] next call() checks elapsed = 999.0 - 0.0 = 999s >= 60s -> HALF_OPEN
+        mock_time.monotonic.side_effect = [0.0, 999.0]
+
+        cb = CollectorCircuitBreaker(name="test", failure_threshold=1, reset_timeout=60.0)
+        cb._time = mock_time
+
+        def _fail():
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            cb.call(_fail)
+
+        assert cb.state == "OPEN"
+        # Next call: timeout elapsed -> transitions OPEN -> HALF_OPEN, runs fn, succeeds -> CLOSED
+        cb.call(lambda: None)
+        assert cb.state == "CLOSED"
+
+    def test_circuit_recovers_on_success(self):
+        from argus_ops.engine.pipeline import CollectorCircuitBreaker
+
+        cb = CollectorCircuitBreaker(name="test", failure_threshold=3, reset_timeout=9999)
+
+        def _fail():
+            raise RuntimeError("boom")
+
+        # 2 failures -- not yet open
+        for _ in range(2):
+            with pytest.raises(RuntimeError):
+                cb.call(_fail)
+
+        # Success resets failure count
+        cb.call(lambda: "ok")
+        assert cb.state == "CLOSED"
+        assert cb._failures == 0
+
+    def test_pipeline_circuit_breaker_per_collector(self, node_snapshot, pod_snapshot):
+        """Each collector gets its own independent circuit breaker."""
+        c1 = _make_mock_collector([node_snapshot])
+        c1.name = "collector_1"
+        c2 = _make_mock_collector([pod_snapshot])
+        c2.name = "collector_2"
+
+        pipeline = Pipeline(collectors=[c1, c2], analyzers=[])
+        cb1 = pipeline._get_circuit_breaker(c1)
+        cb2 = pipeline._get_circuit_breaker(c2)
+        assert cb1 is not cb2
