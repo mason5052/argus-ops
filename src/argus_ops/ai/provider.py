@@ -4,15 +4,48 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
+from pydantic import BaseModel, Field, field_validator
 
 from argus_ops.ai.base import BaseAIProvider
 from argus_ops.ai.cost import CostTracker
 from argus_ops.models import Diagnosis, Finding
+
+# Maximum allowed length for raw LLM response content (32 KB)
+_MAX_CONTENT_BYTES = 32_768
+
+
+class _DiagnosisResponse(BaseModel):
+    """Pydantic model for validating and coercing the LLM JSON response."""
+
+    root_cause: str = "Unknown"
+    explanation: str = ""
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    recommendations: list[str] = []
+    related_resources: list[str] = []
+
+    @field_validator("recommendations", "related_resources", mode="before")
+    @classmethod
+    def coerce_to_list(cls, v: Any) -> list[str]:
+        """Accept a list or a single string; reject other types."""
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        if isinstance(v, str):
+            return [v]
+        return []
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def coerce_confidence(cls, v: Any) -> float:
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.5
 
 logger = logging.getLogger("argus_ops.ai.provider")
 
@@ -34,11 +67,16 @@ class LiteLLMProvider(BaseAIProvider):
         diagnosis = provider.diagnose(findings, context)
     """
 
+    # Timeout in seconds for LLM completion calls
+    _LLM_TIMEOUT: int = 60
+
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
         self.model = self.config.get("model", "gpt-4o-mini")
         self.temperature = self.config.get("temperature", 0.3)
         self.max_tokens = self.config.get("max_tokens", 4096)
+        # Store base_url as instance variable instead of polluting global litellm state
+        self._base_url: str | None = self.config.get("base_url")
         self.cost_tracker = CostTracker(
             limit_per_run=self.config.get("cost_limit_per_run", 1.0)
         )
@@ -47,12 +85,6 @@ class LiteLLMProvider(BaseAIProvider):
             loader=FileSystemLoader(str(_PROMPTS_DIR)),
             autoescape=False,
         )
-
-        # Apply custom base URL if configured (e.g., for Ollama)
-        base_url = self.config.get("base_url")
-        if base_url:
-            import litellm
-            litellm.api_base = base_url
 
     def diagnose(self, findings: list[Finding], context: dict[str, Any]) -> Diagnosis:
         """Generate root cause diagnosis from a list of findings."""
@@ -82,12 +114,16 @@ class LiteLLMProvider(BaseAIProvider):
         )
 
         try:
-            response = litellm.completion(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+            completion_kwargs: dict[str, Any] = {
+                "model": self.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": self.temperature,
+                "max_tokens": self.max_tokens,
+                "timeout": self._LLM_TIMEOUT,
+            }
+            if self._base_url:
+                completion_kwargs["api_base"] = self._base_url
+            response = litellm.completion(**completion_kwargs)
         except Exception as e:
             logger.error("AI diagnosis failed: %s", e)
             return Diagnosis(
@@ -129,43 +165,60 @@ class LiteLLMProvider(BaseAIProvider):
         usage: Any,
         cost: float,
     ) -> Diagnosis:
-        """Parse AI response JSON into a Diagnosis model."""
+        """Parse AI response JSON into a Diagnosis model.
+
+        Enforces a content size limit, safely strips markdown fences,
+        and validates the parsed structure with a Pydantic model.
+        """
         diagnosis_id = f"DIAG-{uuid.uuid4().hex[:8]}"
         finding_ids = [f.finding_id for f in findings]
         tokens = (usage.prompt_tokens + usage.completion_tokens) if usage else 0
 
-        # Strip markdown code fences if present
+        # Guard against oversized LLM responses
+        if len(content.encode()) > _MAX_CONTENT_BYTES:
+            logger.warning(
+                "AI response exceeds %d bytes, truncating", _MAX_CONTENT_BYTES
+            )
+            content = content.encode()[:_MAX_CONTENT_BYTES].decode(errors="replace")
+
+        # Safely strip markdown code fences using regex (handles ```, ```json, etc.)
         cleaned = content.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            cleaned = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
+        fence_match = re.match(r"^```[a-z]*\n(.*?)(?:\n```)?$", cleaned, re.DOTALL)
+        if fence_match:
+            cleaned = fence_match.group(1).strip()
 
         try:
-            data = json.loads(cleaned)
+            raw = json.loads(cleaned)
+            if not isinstance(raw, dict):
+                raise ValueError(f"Expected JSON object, got {type(raw).__name__}")
+            validated = _DiagnosisResponse.model_validate(raw)
             return Diagnosis(
                 diagnosis_id=diagnosis_id,
                 finding_ids=finding_ids,
-                root_cause=data.get("root_cause", "Unknown"),
-                explanation=data.get("explanation", content),
-                confidence=float(data.get("confidence", 0.5)),
-                recommendations=data.get("recommendations", []),
-                related_resources=data.get("related_resources", []),
+                root_cause=validated.root_cause,
+                explanation=validated.explanation,
+                confidence=validated.confidence,
+                recommendations=validated.recommendations,
+                related_resources=validated.related_resources,
                 model_used=self.model,
                 tokens_used=tokens,
                 cost_usd=cost,
             )
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Could not parse AI response as JSON, using raw text")
-            return Diagnosis(
-                diagnosis_id=diagnosis_id,
-                finding_ids=finding_ids,
-                root_cause="See explanation",
-                explanation=content,
-                confidence=0.5,
-                model_used=self.model,
-                tokens_used=tokens,
-                cost_usd=cost,
-            )
+        except json.JSONDecodeError:
+            logger.warning("AI response is not valid JSON, using raw text as explanation")
+        except Exception as exc:
+            logger.warning("AI response validation failed (%s), using raw text", exc)
+
+        return Diagnosis(
+            diagnosis_id=diagnosis_id,
+            finding_ids=finding_ids,
+            root_cause="See explanation",
+            explanation=content,
+            confidence=0.5,
+            model_used=self.model,
+            tokens_used=tokens,
+            cost_usd=cost,
+        )
 
     @staticmethod
     def _estimate_cost(model: str, input_tokens: int, output_tokens: int) -> float:

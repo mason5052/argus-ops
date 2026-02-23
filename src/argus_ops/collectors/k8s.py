@@ -3,12 +3,39 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
+import stat
 from typing import Any
 
 from argus_ops.collectors.base import BaseCollector
 from argus_ops.models import HealthSnapshot, InfraType
 
 logger = logging.getLogger("argus_ops.collectors.k8s")
+
+# Maximum length for event messages sent to AI providers
+_EVENT_MESSAGE_MAX_LEN = 512
+
+# Patterns that may contain sensitive infrastructure details
+_REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Bearer tokens and API keys
+    (re.compile(r"(?i)(bearer\s+|token[=:\s]+)[A-Za-z0-9\-_.~+/]+=*"), r"\1[REDACTED]"),
+    # Private registry credentials embedded in image pull errors
+    (re.compile(r"(?i)(https?://[^:@\s]+:[^@\s]+@)"), r"[REDACTED]@"),
+    # IPv4 addresses (internal RFC-1918 ranges)
+    (re.compile(r"\b(10\.\d{1,3}|\b172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b"), "[INTERNAL-IP]"),
+]
+
+
+def _redact_event_message(message: str | None) -> str | None:
+    """Truncate and redact potentially sensitive content from event messages."""
+    if not message:
+        return message
+    for pattern, replacement in _REDACT_PATTERNS:
+        message = pattern.sub(replacement, message)
+    if len(message) > _EVENT_MESSAGE_MAX_LEN:
+        message = message[:_EVENT_MESSAGE_MAX_LEN] + "...[truncated]"
+    return message
 
 
 class KubernetesCollector(BaseCollector):
@@ -26,6 +53,9 @@ class KubernetesCollector(BaseCollector):
     def infra_type(self) -> InfraType:
         return InfraType.KUBERNETES
 
+    # Default timeout (seconds) for all K8s API calls
+    _API_TIMEOUT: int = 30
+
     def is_available(self) -> bool:
         """Check if we can connect to the K8s API server."""
         try:
@@ -33,7 +63,7 @@ class KubernetesCollector(BaseCollector):
 
             self._load_kubeconfig()
             v1 = client.VersionApi()
-            v1.get_code()
+            v1.get_code(_request_timeout=self._API_TIMEOUT)
             return True
         except Exception as e:
             logger.debug("K8s API not available: %s", e)
@@ -66,14 +96,37 @@ class KubernetesCollector(BaseCollector):
 
         kubeconfig = self.config.get("kubeconfig")
         context = self.config.get("context")
+
+        # Warn if kubeconfig file has overly permissive permissions
+        if kubeconfig:
+            try:
+                mode = os.stat(kubeconfig).st_mode
+                if mode & (stat.S_IRGRP | stat.S_IROTH):
+                    logger.warning(
+                        "kubeconfig %s is readable by group/others (mode %o). "
+                        "Consider running: chmod 600 %s",
+                        kubeconfig,
+                        stat.S_IMODE(mode),
+                        kubeconfig,
+                    )
+            except OSError:
+                pass
+
         try:
             k8s_config.load_kube_config(
                 config_file=kubeconfig,
                 context=context,
             )
         except Exception:
+            logger.warning(
+                "Could not load kubeconfig (path=%s, context=%s), "
+                "falling back to in-cluster config",
+                kubeconfig or "~/.kube/config",
+                context or "current",
+            )
             try:
                 k8s_config.load_incluster_config()
+                logger.info("Using in-cluster service account credentials")
             except Exception as e:
                 raise RuntimeError(f"Cannot load K8s config: {e}") from e
 
@@ -84,7 +137,7 @@ class KubernetesCollector(BaseCollector):
             return configured_ns
 
         exclude = set(self.config.get("exclude_namespaces", []))
-        all_ns = v1.list_namespace()
+        all_ns = v1.list_namespace(_request_timeout=self._API_TIMEOUT)
         return [
             ns.metadata.name
             for ns in all_ns.items
@@ -93,7 +146,7 @@ class KubernetesCollector(BaseCollector):
 
     def _collect_nodes(self, v1: Any) -> HealthSnapshot:
         """Collect node status and resource info."""
-        nodes = v1.list_node()
+        nodes = v1.list_node(_request_timeout=self._API_TIMEOUT)
         node_data = []
         metrics: dict[str, float] = {}
 
@@ -149,7 +202,7 @@ class KubernetesCollector(BaseCollector):
 
     def _collect_pods(self, v1: Any, namespace: str) -> HealthSnapshot:
         """Collect pod status for a namespace."""
-        pods = v1.list_namespaced_pod(namespace)
+        pods = v1.list_namespaced_pod(namespace, _request_timeout=self._API_TIMEOUT)
         pod_data = []
         metrics: dict[str, float] = {}
 
@@ -224,7 +277,7 @@ class KubernetesCollector(BaseCollector):
 
     def _collect_events(self, v1: Any, namespace: str) -> HealthSnapshot:
         """Collect warning events from a namespace."""
-        events = v1.list_namespaced_event(namespace)
+        events = v1.list_namespaced_event(namespace, _request_timeout=self._API_TIMEOUT)
         warning_events = []
 
         for event in events.items:
@@ -232,7 +285,7 @@ class KubernetesCollector(BaseCollector):
                 continue
             warning_events.append({
                 "reason": event.reason,
-                "message": event.message,
+                "message": _redact_event_message(event.message),
                 "involved_object": {
                     "kind": event.involved_object.kind,
                     "name": event.involved_object.name,
@@ -259,7 +312,9 @@ class KubernetesCollector(BaseCollector):
 
     def _collect_deployments(self, apps_v1: Any, namespace: str) -> HealthSnapshot:
         """Collect deployment status for a namespace."""
-        deployments = apps_v1.list_namespaced_deployment(namespace)
+        deployments = apps_v1.list_namespaced_deployment(
+            namespace, _request_timeout=self._API_TIMEOUT
+        )
         deploy_data = []
 
         for dep in deployments.items:
@@ -295,7 +350,9 @@ class KubernetesCollector(BaseCollector):
     def _collect_cronjobs(self, batch_v1: Any, namespace: str) -> HealthSnapshot | None:
         """Collect CronJob status for a namespace."""
         try:
-            cronjobs = batch_v1.list_namespaced_cron_job(namespace)
+            cronjobs = batch_v1.list_namespaced_cron_job(
+                namespace, _request_timeout=self._API_TIMEOUT
+            )
         except Exception:
             return None
 
