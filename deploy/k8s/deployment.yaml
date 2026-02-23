@@ -9,7 +9,7 @@ metadata:
   namespace: monitoring
   labels:
     app: argus-ops
-    version: "0.2.0"
+    version: "0.3.0"
 spec:
   replicas: 1
   selector:
@@ -19,14 +19,14 @@ spec:
     metadata:
       labels:
         app: argus-ops
-        version: "0.2.0"
+        version: "0.3.0"
     spec:
       serviceAccountName: argus-ops
       nodeSelector:
         node-pool: dashboard
       containers:
         - name: argus-ops
-          image: localhost:30500/monitoring/argus-ops:0.2.3
+          image: mason5052/argus-ops:0.3.0
           ports:
             - containerPort: 8080
           env:

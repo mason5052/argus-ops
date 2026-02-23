@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus-ops.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "argus-ops.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    ai:
+      provider: openai
+      model: {{ .Values.ai.model | quote }}
+      api_key_env: {{ .Values.ai.apiKeyEnv | quote }}
+      base_url: {{ if .Values.ai.baseUrl }}{{ .Values.ai.baseUrl | quote }}{{ else }}null{{ end }}
+      temperature: {{ .Values.ai.temperature }}
+      max_tokens: {{ .Values.ai.maxTokens }}
+      cost_limit_per_run: {{ .Values.ai.costLimitPerRun }}
+
+    targets:
+      kubernetes:
+        enabled: {{ .Values.targets.kubernetes.enabled }}
+        kubeconfig: null
+        context: null
+        namespaces: {{ toJson .Values.targets.kubernetes.namespaces }}
+        exclude_namespaces: {{ toJson .Values.targets.kubernetes.excludeNamespaces }}
+
+    analyzers:
+      resource:
+        memory_warning: {{ .Values.analyzers.resource.memoryWarning }}
+        memory_critical: {{ .Values.analyzers.resource.memoryCritical }}
+      pod_health:
+        crashloop_restart_threshold: {{ .Values.analyzers.podHealth.crashloopRestartThreshold }}
+        pending_timeout_minutes: {{ .Values.analyzers.podHealth.pendingTimeoutMinutes }}
+
+    logging:
+      level: INFO
+
+    serve:
+      host: {{ .Values.serve.host | quote }}
+      port: {{ .Values.serve.port }}
+      reload_interval: {{ .Values.serve.reloadInterval }}
+      watch_interval: {{ .Values.serve.watchInterval }}
+      open_browser: {{ .Values.serve.openBrowser }}

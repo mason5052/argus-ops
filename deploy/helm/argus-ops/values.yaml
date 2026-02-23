@@ -1,0 +1,164 @@
+# Default values for argus-ops Helm chart.
+# Override with --set key=value or -f custom-values.yaml
+
+# -- Number of replicas (1 is recommended; argus-ops is stateful via SQLite)
+replicaCount: 1
+
+image:
+  # -- Docker Hub image repository
+  repository: mason5052/argus-ops
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image tag; defaults to chart appVersion
+  tag: ""
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full resource name prefix
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Create a dedicated ServiceAccount
+  create: true
+  # -- Annotations to add to the ServiceAccount
+  annotations: {}
+  # -- ServiceAccount name override (defaults to release name)
+  name: ""
+
+# -- RBAC: create ClusterRole + ClusterRoleBinding for read-only K8s access
+rbac:
+  create: true
+
+# -- Pod annotations
+podAnnotations: {}
+
+# -- Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# -- Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service type (ClusterIP for internal; NodePort or LoadBalancer for external access)
+  type: ClusterIP
+  # -- Service port
+  port: 8080
+  # -- NodePort value (only used when type=NodePort)
+  nodePort: 30880
+
+ingress:
+  # -- Enable Ingress
+  enabled: false
+  # -- Ingress class name
+  className: ""
+  annotations: {}
+  hosts:
+    - host: argus-ops.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# -- Node selector
+nodeSelector: {}
+
+# -- Tolerations
+tolerations: []
+
+# -- Affinity rules
+affinity: {}
+
+# -- Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /api/status
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  failureThreshold: 3
+
+# -- Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /api/status
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+# -- Persistent volume for SQLite incident history
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  mountPath: /home/argus/.argus-ops
+
+# ---- argus-ops application config ----------------------------------------
+
+# -- AI provider configuration
+ai:
+  # -- LiteLLM model identifier (e.g. gpt-4o-mini, claude-haiku-4-5-20251001, ollama/llama3.2)
+  model: gpt-4o-mini
+  # -- Name of the environment variable that holds the API key
+  apiKeyEnv: OPENAI_API_KEY
+  # -- Custom base URL (e.g. http://ollama-service:11434 for Ollama)
+  baseUrl: ""
+  temperature: 0.3
+  maxTokens: 4096
+  # -- Maximum USD spend per diagnosis run (Decimal-safe)
+  costLimitPerRun: "0.50"
+
+# -- Kubernetes scan targets
+targets:
+  kubernetes:
+    enabled: true
+    namespaces: []
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - kube-flannel
+
+# -- Analyzer thresholds
+analyzers:
+  resource:
+    memoryWarning: 85
+    memoryCritical: 95
+  podHealth:
+    crashloopRestartThreshold: 5
+    pendingTimeoutMinutes: 10
+
+# -- Web serve settings
+serve:
+  host: 0.0.0.0
+  port: 8080
+  reloadInterval: 30
+  watchInterval: 60
+  openBrowser: false
+
+# -- API key secret: create a K8s Secret with your API key, then reference it here
+# -- Example: kubectl create secret generic argus-ops-secrets --from-literal=openai-api-key=sk-...
+existingSecret:
+  # -- Name of an existing Secret containing the API key
+  name: ""
+  # -- Key inside the Secret
+  key: "openai-api-key"
