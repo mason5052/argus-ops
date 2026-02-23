@@ -1,0 +1,55 @@
+# argus-ops configuration ConfigMap
+# Mounts as ~/.argus-ops/config.yaml inside the container
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-ops-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    ai:
+      provider: openai
+      model: gpt-4o-mini
+      api_key_env: OPENAI_API_KEY
+      base_url: null
+      temperature: 0.3
+      max_tokens: 4096
+      cost_limit_per_run: 0.50
+
+    targets:
+      kubernetes:
+        enabled: true
+        kubeconfig: null      # null = in-cluster ServiceAccount config
+        context: null
+        namespaces: []        # scan all except excluded
+        exclude_namespaces:
+          - kube-system
+          - kube-public
+          - kube-node-lease
+          - kube-flannel
+
+    analyzers:
+      resource:
+        memory_warning: 85
+        memory_critical: 95
+      pod_health:
+        crashloop_restart_threshold: 5
+        pending_timeout_minutes: 10
+      node_health:
+        conditions_to_check:
+          - Ready
+          - MemoryPressure
+          - DiskPressure
+          - PIDPressure
+
+    logging:
+      level: INFO
+
+    serve:
+      host: 0.0.0.0
+      port: 8080
+      reload_interval: 30
+      watch_interval: 60    # scan every 60s in production
+      open_browser: false
+      ai_diagnosis: false   # enable with OPENAI_API_KEY to activate
