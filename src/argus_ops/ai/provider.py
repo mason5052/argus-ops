@@ -81,7 +81,7 @@ class LiteLLMProvider(BaseAIProvider):
             limit_per_run=self.config.get("cost_limit_per_run", 1.0)
         )
 
-        self._jinja_env = Environment(
+        self._jinja_env = Environment(  # nosec B701 - prompt templates, not HTML
             loader=FileSystemLoader(str(_PROMPTS_DIR)),
             autoescape=False,
         )
