@@ -26,7 +26,7 @@ spec:
         node-pool: dashboard
       containers:
         - name: argus-ops
-          image: mason5052/argus-ops:0.3.0
+          image: mason530984/argus-ops:0.3.0
           ports:
             - containerPort: 8080
           env:

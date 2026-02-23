@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mason5052/argus-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/mason5052/argus-ops/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/argus-ops.svg)](https://badge.fury.io/py/argus-ops)
-[![Docker Pulls](https://img.shields.io/docker/pulls/mason5052/argus-ops.svg)](https://hub.docker.com/r/mason5052/argus-ops)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mason530984/argus-ops.svg)](https://hub.docker.com/r/mason530984/argus-ops)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![codecov](https://codecov.io/gh/mason5052/argus-ops/graph/badge.svg)](https://codecov.io/gh/mason5052/argus-ops)
@@ -83,7 +83,7 @@ docker run --rm -it \
   -v ~/.kube:/home/argus/.kube:ro \
   -v ~/.argus-ops:/home/argus/.argus-ops \
   -e OPENAI_API_KEY=sk-... \
-  mason5052/argus-ops:latest \
+  mason530984/argus-ops:latest \
   argus-ops scan
 ```
 

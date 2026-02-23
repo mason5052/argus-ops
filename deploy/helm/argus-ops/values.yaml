@@ -6,7 +6,7 @@ replicaCount: 1
 
 image:
   # -- Docker Hub image repository
-  repository: mason5052/argus-ops
+  repository: mason530984/argus-ops
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Image tag; defaults to chart appVersion
