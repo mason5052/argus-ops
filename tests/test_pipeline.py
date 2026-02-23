@@ -158,7 +158,7 @@ class TestCircuitBreaker:
         assert cb.state == "CLOSED"
 
     def test_circuit_opens_after_threshold(self):
-        from argus_ops.engine.pipeline import CircuitOpen, CollectorCircuitBreaker
+        from argus_ops.engine.pipeline import CollectorCircuitBreaker
 
         cb = CollectorCircuitBreaker(name="test", failure_threshold=3, reset_timeout=9999)
 
@@ -188,6 +188,7 @@ class TestCircuitBreaker:
 
     def test_circuit_half_open_after_timeout(self):
         from unittest.mock import MagicMock
+
         from argus_ops.engine.pipeline import CollectorCircuitBreaker
 
         mock_time = MagicMock()
