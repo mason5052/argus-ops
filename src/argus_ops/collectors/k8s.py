@@ -23,7 +23,10 @@ _REDACT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Private registry credentials embedded in image pull errors
     (re.compile(r"(?i)(https?://[^:@\s]+:[^@\s]+@)"), r"[REDACTED]@"),
     # IPv4 addresses (internal RFC-1918 ranges)
-    (re.compile(r"\b(10\.\d{1,3}|\b172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b"), "[INTERNAL-IP]"),
+    (
+        re.compile(r"\b(10\.\d{1,3}|\b172\.(1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b"),
+        "[INTERNAL-IP]",
+    ),
 ]
 
 
