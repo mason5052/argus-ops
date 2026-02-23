@@ -1,0 +1,66 @@
+[
+  {
+    "name": "master-1",
+    "conditions": {
+      "Ready": {"status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"},
+      "MemoryPressure": {"status": "False", "reason": "KubeletHasSufficientMemory", "message": ""},
+      "DiskPressure": {"status": "False", "reason": "KubeletHasNoDiskPressure", "message": ""},
+      "PIDPressure": {"status": "False", "reason": "KubeletHasSufficientPID", "message": ""}
+    },
+    "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "node-role.kubernetes.io/master": ""},
+    "allocatable": {"cpu": "3500m", "memory": "7200Mi"},
+    "capacity": {"cpu": "4", "memory": "8192Mi"},
+    "os": "linux",
+    "arch": "amd64",
+    "unschedulable": false,
+    "taints": []
+  },
+  {
+    "name": "worker-2",
+    "conditions": {
+      "Ready": {"status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"},
+      "MemoryPressure": {"status": "False", "reason": "KubeletHasSufficientMemory", "message": ""},
+      "DiskPressure": {"status": "False", "reason": "KubeletHasNoDiskPressure", "message": ""},
+      "PIDPressure": {"status": "False", "reason": "KubeletHasSufficientPID", "message": ""}
+    },
+    "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "amd64", "rpa-worker": "w2"},
+    "allocatable": {"cpu": "3800m", "memory": "14Gi"},
+    "capacity": {"cpu": "4", "memory": "16Gi"},
+    "os": "linux",
+    "arch": "amd64",
+    "unschedulable": false,
+    "taints": []
+  },
+  {
+    "name": "worker-1-windows",
+    "conditions": {
+      "Ready": {"status": "False", "reason": "KubeletNotReady", "message": "container runtime network not ready"},
+      "MemoryPressure": {"status": "False", "reason": "KubeletHasSufficientMemory", "message": ""},
+      "DiskPressure": {"status": "False", "reason": "KubeletHasNoDiskPressure", "message": ""},
+      "PIDPressure": {"status": "False", "reason": "KubeletHasSufficientPID", "message": ""}
+    },
+    "labels": {"kubernetes.io/os": "windows", "kubernetes.io/arch": "amd64", "worker-node": "w1"},
+    "allocatable": {"cpu": "3800m", "memory": "14Gi"},
+    "capacity": {"cpu": "4", "memory": "16Gi"},
+    "os": "windows",
+    "arch": "amd64",
+    "unschedulable": false,
+    "taints": [{"key": "os", "value": "windows", "effect": "NoSchedule"}]
+  },
+  {
+    "name": "jetson",
+    "conditions": {
+      "Ready": {"status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"},
+      "MemoryPressure": {"status": "True", "reason": "KubeletHasInsufficientMemory", "message": "available memory is low"},
+      "DiskPressure": {"status": "False", "reason": "KubeletHasNoDiskPressure", "message": ""},
+      "PIDPressure": {"status": "False", "reason": "KubeletHasSufficientPID", "message": ""}
+    },
+    "labels": {"kubernetes.io/os": "linux", "kubernetes.io/arch": "arm64", "rpa-worker": "jetson"},
+    "allocatable": {"cpu": "5500m", "memory": "5Gi"},
+    "capacity": {"cpu": "6", "memory": "8Gi"},
+    "os": "linux",
+    "arch": "arm64",
+    "unschedulable": false,
+    "taints": []
+  }
+]
