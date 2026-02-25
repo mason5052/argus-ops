@@ -202,9 +202,21 @@ class TestDiagnoseCommand:
 
 
 class TestConfigCommand:
+    def _mock_auth(self):
+        """Return a mock Authenticator that simulates empty user store."""
+        mock_auth = MagicMock()
+        mock_auth.user_store.user_count.return_value = 0
+        return mock_auth
+
     def test_config_init_creates_file(self, runner, tmp_path):
         config_path = tmp_path / "test-config.yaml"
-        result = runner.invoke(cli, ["config", "init", "--path", str(config_path)])
+        mock_auth = self._mock_auth()
+        with patch("argus_ops.auth.authenticator.Authenticator", return_value=mock_auth):
+            result = runner.invoke(
+                cli,
+                ["config", "init", "--path", str(config_path)],
+                input="admin\nsecret123\nsecret123\n",
+            )
         assert result.exit_code == 0
         assert config_path.exists()
         content = config_path.read_text()
@@ -220,7 +232,13 @@ class TestConfigCommand:
     def test_config_init_force_overwrites(self, runner, tmp_path):
         config_path = tmp_path / "existing.yaml"
         config_path.write_text("old: content")
-        result = runner.invoke(cli, ["config", "init", "--path", str(config_path), "--force"])
+        mock_auth = self._mock_auth()
+        with patch("argus_ops.auth.authenticator.Authenticator", return_value=mock_auth):
+            result = runner.invoke(
+                cli,
+                ["config", "init", "--path", str(config_path), "--force"],
+                input="admin\nsecret123\nsecret123\n",
+            )
         assert result.exit_code == 0
         assert "old: content" not in config_path.read_text()
 

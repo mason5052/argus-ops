@@ -41,6 +41,10 @@ class FindingCategory(str, Enum):
     CERTIFICATE = "certificate"
     SECURITY = "security"
     CONNECTIVITY = "connectivity"
+    STORAGE = "storage"
+    CRONJOB = "cronjob"
+    NETWORK_POLICY = "network_policy"
+    CONFIGURATION = "configuration"
     CUSTOM = "custom"
 
 

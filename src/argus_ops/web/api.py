@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from argus_ops.reporters.json_reporter import diagnosis_to_dict, finding_to_dict
 from argus_ops.web.watch_service import WatchService
@@ -172,5 +175,45 @@ def create_app(watch: WatchService, cfg: dict[str, Any]) -> FastAPI:
             "watch_interval": state["interval"],
             "reload_interval": request.app.state.reload_interval,
         }
+
+    # -------------------------------------------------------------------------
+    # Server-Sent Events (SSE) for real-time dashboard updates
+    # -------------------------------------------------------------------------
+
+    @app.get("/api/events")
+    async def api_events(request: Request) -> StreamingResponse:
+        """SSE endpoint for real-time cluster events.
+
+        Dashboard connects via EventSource and receives events as they happen
+        instead of polling on setInterval.
+        """
+
+        async def event_generator():
+            """Yield SSE events from the WatchService event queue."""
+            last_scan = None
+            while True:
+                if await request.is_disconnected():
+                    break
+                # Check for new events from watch service
+                events = watch.get_pending_events()
+                for ev in events:
+                    yield f"data: {json.dumps(ev)}\n\n"
+                # Also send periodic state updates (heartbeat + data sync)
+                state = watch.get_state()
+                current_scan = state.get("last_scan")
+                if current_scan != last_scan:
+                    last_scan = current_scan
+                    yield f"event: state\ndata: {json.dumps({'last_scan': current_scan, 'finding_count': len(state['findings']), 'node_count': len(state['nodes'])})}\n\n"
+                await asyncio.sleep(1)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return app

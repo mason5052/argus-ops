@@ -58,6 +58,15 @@ DEFAULT_CONFIG: dict[str, Any] = {
             ],
         },
     },
+    "auth": {
+        "session_ttl_hours": 24,
+        "data_dir": None,  # None = ~/.argus-ops
+    },
+    "audit": {
+        "log_dir": None,  # None = ~/.argus-ops/audit
+        "cluster_audit_dir": None,  # None = ~/.argus-ops/cluster-audit
+        "retention_days": 90,
+    },
     "logging": {
         "level": "INFO",
     },

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import queue
 import threading
 import time
 from datetime import datetime, timezone
@@ -15,6 +17,7 @@ from argus_ops.store import IncidentStore
 logger = logging.getLogger("argus_ops.web.watch")
 
 _MAX_TREND = 120       # max trend data points kept in memory (120 * 30s = 1 hour)
+_MAX_EVENT_QUEUE = 500  # max SSE events buffered
 
 
 class DiagnoseStatus(str, Enum):
@@ -70,6 +73,9 @@ class WatchService:
         self._thread: threading.Thread | None = None
         self._diagnose_status: DiagnoseStatus = DiagnoseStatus.IDLE
         self._diagnose_error: str | None = None
+
+        # SSE event queue for real-time dashboard updates
+        self._event_queue: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=_MAX_EVENT_QUEUE)
 
     def start(self) -> None:
         """Start the background polling daemon thread."""
@@ -170,6 +176,28 @@ class WatchService:
             self._interval = seconds
         logger.info("WatchService interval updated to %ds", seconds)
 
+    def get_pending_events(self, max_events: int = 50) -> list[dict[str, Any]]:
+        """Drain pending SSE events from the queue (non-blocking)."""
+        events: list[dict[str, Any]] = []
+        while len(events) < max_events:
+            try:
+                events.append(self._event_queue.get_nowait())
+            except queue.Empty:
+                break
+        return events
+
+    def _push_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Push an event to the SSE queue (non-blocking, drops if full)."""
+        event = {
+            "type": event_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **data,
+        }
+        try:
+            self._event_queue.put_nowait(event)
+        except queue.Full:
+            pass  # Drop event if queue is full
+
     # -------------------------------------------------------------------------
     # Private methods
     # -------------------------------------------------------------------------
@@ -226,6 +254,13 @@ class WatchService:
                 self._trend = self._trend[-_MAX_TREND:]
             self._last_scan = datetime.now(timezone.utc)
             self._error = None
+
+        # Push SSE event for dashboard real-time update
+        self._push_event("scan_complete", {
+            "finding_count": len(findings),
+            "node_count": len(node_dicts),
+            "trend_point": trend_point,
+        })
 
         logger.info(
             "Scan complete: %d finding(s), %d node(s)", len(findings), len(node_dicts)
