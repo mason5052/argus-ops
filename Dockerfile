@@ -7,7 +7,7 @@ COPY pyproject.toml README.md ./
 COPY src/ ./src/
 
 # Install into a prefix so we can copy only the installed files
-RUN pip install --no-cache-dir --prefix=/install ".[web]"
+RUN pip install --no-cache-dir --prefix=/install ".[web,auth]"
 
 # --- final stage ---
 FROM python:3.12-slim
