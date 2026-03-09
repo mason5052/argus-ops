@@ -1,0 +1,153 @@
+﻿# Default values for argus-ops Helm chart.
+# Override with --set key=value or -f custom-values.yaml
+
+replicaCount: 1
+
+image:
+  repository: argus-ops
+  pullPolicy: IfNotPresent
+  tag: "manual"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+  profile: viewer
+
+config:
+  path: /etc/argus-ops/config.yaml
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+  nodePort: null
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: argus-ops.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  mountPath: /home/argus/.argus-ops
+
+ai:
+  model: gpt-4o-mini
+  apiKeyEnv: OPENAI_API_KEY
+  baseUrl: ""
+  temperature: 0.3
+  maxTokens: 4096
+  costLimitPerRun: "0.50"
+
+targets:
+  kubernetes:
+    enabled: true
+    namespaces: []
+    excludeNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - kube-flannel
+  host:
+    enabled: false
+    paths: []
+  docker:
+    enabled: false
+  git:
+    enabled: false
+    paths: []
+    maxDepth: 3
+  terraform:
+    enabled: false
+    paths: []
+    maxDepth: 3
+  github:
+    enabled: false
+    tokenEnv: GITHUB_TOKEN
+  aws:
+    enabled: false
+
+analyzers:
+  resource:
+    memoryWarning: 85
+    memoryCritical: 95
+  podHealth:
+    crashloopRestartThreshold: 5
+
+inventory:
+  enabled: true
+  paths: []
+  maxDepth: 3
+
+auth:
+  sessionTtlHours: 24
+  cookieName: argus_ops_session
+
+serve:
+  host: 0.0.0.0
+  port: 8080
+  reloadInterval: 30
+  watchInterval: 60
+  openBrowser: false
+  mcp: false
+
+existingSecret:
+  name: ""
+  key: openai-api-key

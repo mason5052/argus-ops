@@ -1,0 +1,466 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argus-Ops Dashboard</title>
+  <style>
+    :root {
+      --green-dark: #003628;
+      --green-mid: #00694e;
+      --green-soft: #f2f7f0;
+      --gold: #bd975f;
+      --body-text: #4d4d4d;
+      --card-border: #c8ddd6;
+      --danger: #c0392b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; background: var(--green-soft); color: var(--body-text); }
+    header { background: var(--green-dark); color: white; padding: 14px 24px; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+    header h1 { margin: 0; font-size: 22px; }
+    header .meta { font-size: 13px; color: #8ec8b0; }
+    header button { background: transparent; border: 1px solid #8ec8b0; color: white; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+    nav { background: var(--green-mid); display: flex; gap: 4px; padding: 0 16px; overflow-x: auto; }
+    nav button { background: none; border: none; color: #b8e0d0; padding: 12px 16px; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
+    nav button.active { background: var(--green-soft); color: var(--green-dark); border-bottom-color: var(--gold); font-weight: bold; }
+    main { padding: 24px; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    .panel { background: white; border: 1px solid var(--card-border); border-top: 3px solid var(--gold); border-radius: 6px; padding: 16px; margin-bottom: 16px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .summary-card { background: white; border: 1px solid var(--card-border); border-radius: 6px; padding: 14px; }
+    .summary-card .label { color: #5a7a6e; font-size: 12px; text-transform: uppercase; }
+    .summary-card .value { color: var(--green-dark); font-size: 24px; font-weight: bold; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; background: white; }
+    th, td { padding: 10px; border-bottom: 1px solid var(--card-border); text-align: left; font-size: 14px; }
+    th { background: var(--green-dark); color: white; }
+    .sev { display: inline-block; padding: 3px 8px; border-radius: 4px; color: white; font-size: 12px; text-transform: uppercase; }
+    .sev-critical { background: #c0392b; }
+    .sev-high { background: #e67e22; }
+    .sev-medium { background: #e6b800; color: #222; }
+    .sev-low { background: #27ae60; }
+    .sev-info { background: #7f8c8d; }
+    #message { color: var(--danger); min-height: 20px; margin-bottom: 12px; }
+    .small { color: #5a7a6e; font-size: 12px; }
+    .inline-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn { background: var(--green-dark); color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; }
+    textarea, select { width: 100%; border: 1px solid var(--card-border); border-radius: 4px; padding: 10px; font: inherit; }
+    textarea { min-height: 110px; resize: vertical; margin-bottom: 10px; }
+    .plan-card { border: 1px solid var(--card-border); border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+    .panel-title { margin-top: 0; color: var(--green-dark); }
+    pre { background: #f7fbf9; border: 1px solid var(--card-border); border-radius: 6px; padding: 12px; overflow-x: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Argus-Ops Dashboard</h1>
+    <div class="meta">{{ session.username }} ({{ session.role.value }}) | v{{ version }}</div>
+  </div>
+  <div class="inline-actions">
+    <span id="last-scan" class="small">Last scan: --</span>
+    <button onclick="logout()">Logout</button>
+  </div>
+</header>
+<nav>
+  <button class="active" onclick="showTab(event, 'overview')">Overview</button>
+  <button onclick="showTab(event, 'findings')">Findings</button>
+  <button onclick="showTab(event, 'inventory')">Inventory</button>
+  <button onclick="showTab(event, 'diagnoses')">AI Diagnoses</button>
+  <button onclick="showTab(event, 'automation')">Automation</button>
+  <button onclick="showTab(event, 'audit')">Audit</button>
+</nav>
+<main>
+  <div id="message"></div>
+
+  <section id="tab-overview" class="tab active">
+    <div class="summary-grid">
+      <div class="summary-card"><div class="label">Findings</div><div id="overview-findings" class="value">0</div></div>
+      <div class="summary-card"><div class="label">Nodes</div><div id="overview-nodes" class="value">0</div></div>
+      <div class="summary-card"><div class="label">Assets</div><div id="overview-assets" class="value">0</div></div>
+      <div class="summary-card"><div class="label">Capabilities</div><div id="overview-capabilities" class="value">0</div></div>
+    </div>
+    <div class="panel">
+      <h2 class="panel-title">Session</h2>
+      <div id="session-info"></div>
+    </div>
+  </section>
+
+  <section id="tab-findings" class="tab">
+    <div class="panel">
+      <div class="inline-actions">
+        <button id="run-diagnose" class="btn">Run AI Diagnosis</button>
+        <span class="small">Admin only</span>
+      </div>
+      <table>
+        <thead><tr><th>Severity</th><th>Category</th><th>Title</th><th>Target</th></tr></thead>
+        <tbody id="findings-body"><tr><td colspan="4">Waiting for scan...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-inventory" class="tab">
+    <div class="panel">
+      <table>
+        <thead><tr><th>Type</th><th>Name</th><th>Infra</th><th>Tags</th></tr></thead>
+        <tbody id="assets-body"><tr><td colspan="4">Waiting for discovery...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="tab-diagnoses" class="tab">
+    <div id="diagnosis-list" class="panel">No diagnoses yet.</div>
+  </section>
+
+  <section id="tab-automation" class="tab">
+    <div class="panel">
+      <h2 class="panel-title">Request Planning</h2>
+      <div class="small">Viewer accounts may create read-only plans. Admin accounts may create mutating GitOps or direct plans and apply them.</div>
+      <textarea id="plan-goal" placeholder="Example: summarize the infrastructure discovered on this host"></textarea>
+      <div class="inline-actions">
+        <select id="plan-mode" style="max-width: 220px;">
+          <option value="auto">Auto</option>
+          <option value="gitops">GitOps</option>
+          <option value="direct">Direct</option>
+        </select>
+        <button id="plan-button" class="btn">Create Plan</button>
+      </div>
+    </div>
+    <div id="plans-panel" class="panel">No plans yet.</div>
+    <div id="executions-panel" class="panel">Loading execution history...</div>
+    <div id="workflows-panel" class="panel">Loading workflows...</div>
+    <div id="workflow-export-panel" class="panel">Select a plan to inspect its exported workflow.</div>
+    <div id="plugins-panel" class="panel">Loading plugins...</div>
+  </section>
+
+  <section id="tab-audit" class="tab">
+    <div id="audit-panel" class="panel">Loading audit summary...</div>
+  </section>
+</main>
+<script>
+let currentRole = 'viewer';
+let eventSource = null;
+
+function showTab(event, name) {
+  document.querySelectorAll('.tab').forEach((node) => node.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach((node) => node.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function sevBadge(sev) {
+  return `<span class="sev sev-${sev}">${sev}</span>`;
+}
+
+function setMessage(text) {
+  document.getElementById('message').textContent = text || '';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/';
+}
+
+async function loadSession() {
+  const response = await fetch('/api/auth/me');
+  if (!response.ok) {
+    window.location.href = '/';
+    return;
+  }
+  const data = await response.json();
+  currentRole = data.role;
+  document.getElementById('session-info').textContent = `${data.username} (${data.role}) expires ${new Date(data.expires_at).toLocaleString()}`;
+  const diagnoseButton = document.getElementById('run-diagnose');
+  diagnoseButton.disabled = data.role !== 'admin';
+  diagnoseButton.onclick = runDiagnose;
+  const planButton = document.getElementById('plan-button');
+  planButton.onclick = createPlan;
+  const planMode = document.getElementById('plan-mode');
+  planMode.disabled = data.role !== 'admin';
+  if (data.role !== 'admin') {
+    planMode.value = 'auto';
+  }
+}
+
+async function loadOverview() {
+  const [statusRes, scanRes, nodesRes, inventoryRes] = await Promise.all([
+    fetch('/api/status'),
+    fetch('/api/scan'),
+    fetch('/api/nodes'),
+    fetch('/api/inventory'),
+  ]);
+  if ([statusRes, scanRes, nodesRes, inventoryRes].some((res) => res.status === 401)) {
+    window.location.href = '/';
+    return;
+  }
+  const status = await statusRes.json();
+  const scan = await scanRes.json();
+  const nodes = await nodesRes.json();
+  const inventory = await inventoryRes.json();
+  document.getElementById('last-scan').textContent = 'Last scan: ' + (status.last_scan ? new Date(status.last_scan).toLocaleTimeString() : '--');
+  document.getElementById('overview-findings').textContent = scan.total;
+  document.getElementById('overview-nodes').textContent = nodes.total;
+  document.getElementById('overview-assets').textContent = inventory.asset_count;
+  document.getElementById('overview-capabilities').textContent = inventory.capabilities.length;
+}
+
+async function loadFindings() {
+  const response = await fetch('/api/scan');
+  if (!response.ok) return;
+  const data = await response.json();
+  const body = document.getElementById('findings-body');
+  if (!data.findings.length) {
+    body.innerHTML = '<tr><td colspan="4">No findings detected.</td></tr>';
+    return;
+  }
+  body.innerHTML = data.findings.map((finding) => `
+    <tr>
+      <td>${sevBadge(finding.severity)}</td>
+      <td>${escapeHtml(finding.category)}</td>
+      <td>${escapeHtml(finding.title)}</td>
+      <td>${escapeHtml(finding.target)}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadAssets() {
+  const response = await fetch('/api/assets');
+  if (!response.ok) return;
+  const data = await response.json();
+  const body = document.getElementById('assets-body');
+  if (!data.assets.length) {
+    body.innerHTML = '<tr><td colspan="4">No assets discovered yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = data.assets.map((asset) => `
+    <tr>
+      <td>${escapeHtml(asset.asset_type)}</td>
+      <td>${escapeHtml(asset.name)}</td>
+      <td>${escapeHtml(asset.infra_type)}</td>
+      <td>${escapeHtml((asset.tags || []).join(', '))}</td>
+    </tr>
+  `).join('');
+}
+
+async function loadDiagnoses() {
+  const response = await fetch('/api/diagnoses');
+  if (!response.ok) return;
+  const data = await response.json();
+  const panel = document.getElementById('diagnosis-list');
+  if (!data.incidents.length) {
+    panel.textContent = 'No diagnoses yet.';
+    return;
+  }
+  panel.innerHTML = data.incidents.map((incident) => {
+    const diagnosis = incident.diagnosis;
+    if (!diagnosis) {
+      return `<div><strong>${escapeHtml(incident.incident_id)}</strong> - No diagnosis</div>`;
+    }
+    return `<div style="margin-bottom:12px"><strong>${escapeHtml(incident.incident_id)}</strong><br>${escapeHtml(diagnosis.root_cause)}<br><span class="small">${escapeHtml(diagnosis.explanation)}</span></div>`;
+  }).join('');
+}
+
+async function loadAutomation() {
+  const [plansRes, executionsRes, workflowsRes, pluginsRes] = await Promise.all([
+    fetch('/api/plans'),
+    fetch('/api/executions'),
+    fetch('/api/workflows'),
+    fetch('/api/plugins'),
+  ]);
+  if ([plansRes, executionsRes, workflowsRes, pluginsRes].some((res) => res.status === 401)) {
+    window.location.href = '/';
+    return;
+  }
+
+  const plansData = await plansRes.json();
+  const executionsData = await executionsRes.json();
+  const workflowsData = await workflowsRes.json();
+  const pluginsData = await pluginsRes.json();
+
+  const plansPanel = document.getElementById('plans-panel');
+  if (!plansData.plans.length) {
+    plansPanel.textContent = 'No plans have been generated yet.';
+  } else {
+    plansPanel.innerHTML = plansData.plans.map((plan) => {
+      const canApply = currentRole === 'admin' && plan.intent === 'mutating';
+      const applyButton = canApply ? `<button class="btn" onclick="applyPlan('${plan.plan_id}')">Approve and Apply</button>` : '';
+      const exportButton = `<button class="btn" onclick="showWorkflowExport('${plan.plan_id}')">View Workflow Export</button>`;
+      return `
+        <div class="plan-card">
+          <strong>${escapeHtml(plan.plan_id)}</strong> - ${escapeHtml(plan.title)}<br>
+          <span class="small">${escapeHtml(plan.impact_summary)}</span><br>
+          <span class="small">mode=${escapeHtml(plan.metadata.execution_mode)} risk=${escapeHtml(plan.metadata.risk_level)}</span><br>
+          <span class="small">workflow=${escapeHtml(plan.metadata.workflow_export_path || '-')}</span><br>
+          <div class="inline-actions">${exportButton}${applyButton}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  const executionsPanel = document.getElementById('executions-panel');
+  if (!executionsData.executions.length) {
+    executionsPanel.textContent = 'No execution records yet.';
+  } else {
+    executionsPanel.innerHTML = `<h2 class="panel-title">Execution History</h2>` + executionsData.executions.map((record) => `
+      <div class="plan-card">
+        <strong>${escapeHtml(record.execution_id)}</strong><br>
+        <span class="small">plan=${escapeHtml(record.plan_id)} mode=${escapeHtml(record.execution_mode)} status=${escapeHtml(record.status)}</span>
+      </div>
+    `).join('');
+  }
+
+  const workflowsPanel = document.getElementById('workflows-panel');
+  workflowsPanel.innerHTML = `<h2 class="panel-title">Workflow Catalog</h2>` + workflowsData.workflows.map((workflow) => `
+    <div class="plan-card">
+      <strong>${escapeHtml(workflow.workflow_id)}</strong><br>
+      <span class="small">${escapeHtml(workflow.name)}</span><br>
+      <span class="small">triggers=${escapeHtml((workflow.triggers || []).join(', '))} steps=${escapeHtml((workflow.steps || []).length)}</span>
+    </div>
+  `).join('');
+
+  const pluginsPanel = document.getElementById('plugins-panel');
+  pluginsPanel.innerHTML = `<h2 class="panel-title">Built-in Plugins</h2>` + pluginsData.plugins.map((plugin) => `
+    <div class="plan-card">
+      <strong>${escapeHtml(plugin.name)}</strong><br>
+      <span class="small">kind=${escapeHtml(plugin.kind)}</span>
+    </div>
+  `).join('');
+}
+
+async function showWorkflowExport(planId) {
+  const panel = document.getElementById('workflow-export-panel');
+  panel.textContent = 'Loading workflow export...';
+  const response = await fetch(`/api/workflows/export/${planId}`);
+  const data = await response.json();
+  if (!response.ok) {
+    panel.textContent = data.detail || 'Failed to load workflow export.';
+    return;
+  }
+  panel.innerHTML = `
+    <h2 class="panel-title">Workflow Export</h2>
+    <div class="small">Plan: ${escapeHtml(planId)}</div>
+    <div class="small">Path: ${escapeHtml(data.path)}</div>
+    <pre id="workflow-export-content"></pre>
+  `;
+  document.getElementById('workflow-export-content').textContent = JSON.stringify(data.workflow, null, 2);
+}
+
+async function createPlan() {
+  const goal = document.getElementById('plan-goal').value.trim();
+  if (!goal) {
+    setMessage('Enter a request before creating a plan.');
+    return;
+  }
+  setMessage('Creating plan...');
+  const mode = document.getElementById('plan-mode').value;
+  const response = await fetch('/api/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ goal, mode, targets: [] }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    setMessage(data.detail || 'Plan creation failed.');
+    return;
+  }
+  document.getElementById('plan-goal').value = '';
+  setMessage(`Plan created: ${data.plan.plan_id}`);
+  await loadAutomation();
+}
+
+async function applyPlan(planId) {
+  if (currentRole !== 'admin') {
+    setMessage('Admin role required.');
+    return;
+  }
+  setMessage(`Applying ${planId}...`);
+  const response = await fetch('/api/apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan_id: planId, approve: true, direct: false }),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    setMessage(data.detail || data.status || 'Apply failed.');
+    return;
+  }
+  setMessage(`Plan applied: ${planId}`);
+  await loadAutomation();
+}
+
+async function loadAudit() {
+  const panel = document.getElementById('audit-panel');
+  if (currentRole !== 'admin') {
+    panel.textContent = 'Viewer accounts do not have access to raw audit records.';
+    return;
+  }
+  const response = await fetch('/api/admin/audit');
+  if (!response.ok) {
+    panel.textContent = 'Failed to load audit records.';
+    return;
+  }
+  const data = await response.json();
+  if (!data.records.length) {
+    panel.textContent = 'No audit records available for today.';
+    return;
+  }
+  panel.innerHTML = data.records.slice(0, 10).map((record) => {
+    const result = record.result && record.result.status ? record.result.status : 'unknown';
+    return `<div style="margin-bottom:10px"><strong>${escapeHtml(record.action)}</strong> - ${escapeHtml(record.actor || 'anonymous')} - ${escapeHtml(result)}<br><span class="small">${new Date(record.timestamp).toLocaleString()}</span></div>`;
+  }).join('');
+}
+
+async function runDiagnose() {
+  setMessage('Running AI diagnosis...');
+  const response = await fetch('/api/diagnose', { method: 'POST' });
+  const data = await response.json();
+  if (!response.ok) {
+    setMessage(data.detail || 'Diagnosis failed');
+    return;
+  }
+  setMessage(`Diagnosis complete: ${data.total} incident(s)`);
+  await loadDiagnoses();
+}
+
+function connectEvents() {
+  if (eventSource) {
+    eventSource.close();
+  }
+  eventSource = new EventSource('/api/events');
+  eventSource.onmessage = () => refreshAll();
+  eventSource.addEventListener('state', () => refreshAll());
+  eventSource.onerror = () => {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    setTimeout(connectEvents, {{ reload_interval * 1000 }});
+  };
+}
+
+async function refreshAll() {
+  await Promise.all([loadSession(), loadOverview(), loadFindings(), loadAssets(), loadDiagnoses(), loadAutomation()]);
+  await loadAudit();
+}
+
+refreshAll();
+connectEvents();
+setInterval(() => {
+  if (!eventSource) refreshAll();
+}, {{ reload_interval * 1000 }});
+</script>
+</body>
+</html>
+
+
+

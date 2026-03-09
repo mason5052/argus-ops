@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "argus-ops.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "argus-ops.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    ai:
+      provider: openai
+      model: {{ .Values.ai.model | quote }}
+      api_key_env: {{ .Values.ai.apiKeyEnv | quote }}
+      base_url: {{ if .Values.ai.baseUrl }}{{ .Values.ai.baseUrl | quote }}{{ else }}null{{ end }}
+      temperature: {{ .Values.ai.temperature }}
+      max_tokens: {{ .Values.ai.maxTokens }}
+      cost_limit_per_run: {{ .Values.ai.costLimitPerRun }}
+
+    targets:
+      kubernetes:
+        enabled: {{ .Values.targets.kubernetes.enabled }}
+        kubeconfig: null
+        context: null
+        namespaces: {{ toJson .Values.targets.kubernetes.namespaces }}
+        exclude_namespaces: {{ toJson .Values.targets.kubernetes.excludeNamespaces }}
+      host:
+        enabled: {{ .Values.targets.host.enabled }}
+        paths: {{ toJson .Values.targets.host.paths }}
+      docker:
+        enabled: {{ .Values.targets.docker.enabled }}
+      git:
+        enabled: {{ .Values.targets.git.enabled }}
+        paths: {{ toJson .Values.targets.git.paths }}
+        max_depth: {{ .Values.targets.git.maxDepth }}
+      terraform:
+        enabled: {{ .Values.targets.terraform.enabled }}
+        paths: {{ toJson .Values.targets.terraform.paths }}
+        max_depth: {{ .Values.targets.terraform.maxDepth }}
+      github:
+        enabled: {{ .Values.targets.github.enabled }}
+        token_env: {{ .Values.targets.github.tokenEnv | quote }}
+      aws:
+        enabled: {{ .Values.targets.aws.enabled }}
+
+    inventory:
+      enabled: {{ .Values.inventory.enabled }}
+      paths: {{ toJson .Values.inventory.paths }}
+      max_depth: {{ .Values.inventory.maxDepth }}
+
+    analyzers:
+      resource:
+        memory_warning: {{ .Values.analyzers.resource.memoryWarning }}
+        memory_critical: {{ .Values.analyzers.resource.memoryCritical }}
+      pod_health:
+        crashloop_restart_threshold: {{ .Values.analyzers.podHealth.crashloopRestartThreshold }}
+        pending_timeout_minutes: {{ .Values.analyzers.podHealth.pendingTimeoutMinutes }}
+
+    auth:
+      session_ttl_hours: {{ .Values.auth.sessionTtlHours }}
+      data_dir: null
+      cookie_name: {{ .Values.auth.cookieName | quote }}
+
+    logging:
+      level: INFO
+
+    serve:
+      host: {{ .Values.serve.host | quote }}
+      port: {{ .Values.serve.port }}
+      reload_interval: {{ .Values.serve.reloadInterval }}
+      watch_interval: {{ .Values.serve.watchInterval }}
+      open_browser: {{ .Values.serve.openBrowser }}
+      mcp: {{ .Values.serve.mcp }}
+

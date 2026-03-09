@@ -1,0 +1,102 @@
+[
+  {
+    "name": "rpa-worker-0001-abc12",
+    "namespace": "rpa",
+    "phase": "Running",
+    "node_name": "worker-2",
+    "creation_timestamp": "2026-02-22T00:00:00+00:00",
+    "containers": [
+      {
+        "name": "rpa-worker",
+        "ready": true,
+        "restart_count": 0,
+        "image": "localhost:30500/rpa:latest",
+        "state": {"state": "running", "started_at": "2026-02-22T01:00:00+00:00"}
+      }
+    ],
+    "resources": {
+      "rpa-worker": {
+        "requests": {"cpu": "500m", "memory": "512Mi"},
+        "limits": {"cpu": "1000m", "memory": "1Gi"}
+      }
+    }
+  },
+  {
+    "name": "crashloop-pod-xyz99",
+    "namespace": "rpa",
+    "phase": "Running",
+    "node_name": "worker-2",
+    "creation_timestamp": "2026-02-22T00:00:00+00:00",
+    "containers": [
+      {
+        "name": "app",
+        "ready": false,
+        "restart_count": 12,
+        "image": "localhost:30500/app:broken",
+        "state": {"state": "waiting", "waiting_reason": "CrashLoopBackOff", "waiting_message": "back-off 5m0s restarting failed container"}
+      }
+    ],
+    "resources": {}
+  },
+  {
+    "name": "oom-pod-def45",
+    "namespace": "rpa",
+    "phase": "Running",
+    "node_name": "worker-3",
+    "creation_timestamp": "2026-02-22T00:00:00+00:00",
+    "containers": [
+      {
+        "name": "heavy-app",
+        "ready": false,
+        "restart_count": 3,
+        "image": "localhost:30500/heavy:latest",
+        "state": {"state": "terminated", "terminated_reason": "OOMKilled", "exit_code": 137}
+      }
+    ],
+    "resources": {
+      "heavy-app": {
+        "requests": {"memory": "512Mi"},
+        "limits": {"memory": "512Mi"}
+      }
+    }
+  },
+  {
+    "name": "pending-pod-ghi78",
+    "namespace": "rpa",
+    "phase": "Pending",
+    "node_name": null,
+    "creation_timestamp": "2026-02-21T00:00:00+00:00",
+    "containers": [
+      {
+        "name": "waiter",
+        "ready": false,
+        "restart_count": 0,
+        "image": "nginx:latest",
+        "state": {"state": "waiting", "waiting_reason": "PodInitializing"}
+      }
+    ],
+    "resources": {}
+  },
+  {
+    "name": "no-limits-pod-jkl01",
+    "namespace": "default",
+    "phase": "Running",
+    "node_name": "worker-4",
+    "creation_timestamp": "2026-02-22T06:00:00+00:00",
+    "containers": [
+      {
+        "name": "web",
+        "ready": true,
+        "restart_count": 0,
+        "image": "nginx:latest",
+        "state": {"state": "running"}
+      }
+    ],
+    "resources": {
+      "web": {
+        "requests": {},
+        "limits": {}
+      }
+    }
+  }
+]

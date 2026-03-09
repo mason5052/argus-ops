@@ -1,0 +1,87 @@
+﻿# Public example manifest for local or non-production evaluation only.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argus-ops
+  namespace: monitoring
+  labels:
+    app: argus-ops
+    version: "0.4.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: argus-ops
+  template:
+    metadata:
+      labels:
+        app: argus-ops
+        version: "0.4.0"
+    spec:
+      serviceAccountName: argus-ops
+      containers:
+        - name: argus-ops
+          image: argus-ops:manual
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ARGUS_OPS_LOG_LEVEL
+              value: "INFO"
+            - name: ARGUS_OPS_CONFIG
+              value: "/etc/argus-ops/config.yaml"
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: argus-ops-secrets
+                  key: openai-api-key
+          volumeMounts:
+            - name: config
+              mountPath: /etc/argus-ops/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: argus-ops-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argus-ops
+  namespace: monitoring
+  labels:
+    app: argus-ops
+spec:
+  type: ClusterIP
+  selector:
+    app: argus-ops
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

@@ -1,0 +1,23 @@
+apiVersion: v2
+name: argus-ops
+description: AI-powered infrastructure discovery and operations dashboard
+type: application
+version: 0.4.0
+appVersion: "0.4.0"
+home: https://github.com/mason5052/argus-ops
+sources:
+  - https://github.com/mason5052/argus-ops
+maintainers:
+  - name: Mason Kim
+    email: ehehwnwjs5052@gmail.com
+    url: https://github.com/mason5052
+keywords:
+  - aiops
+  - devsecops
+  - monitoring
+  - kubernetes
+  - inventory
+  - observability
+annotations:
+  artifacthub.io/category: monitoring-logging
+  artifacthub.io/license: MIT
